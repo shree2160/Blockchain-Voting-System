@@ -12,18 +12,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { ethers } from "ethers";
 
-// ABI + address are written here by the deploy script
-// Fallback to an empty shell so the app renders without crashing
-let CONTRACT_ABI = [];
-let CONTRACT_ADDRESS = "";
+import artifact from "../abis/AdvancedVoting.json";
 
-try {
-  const artifact = await import("../abis/AdvancedVoting.json");
-  CONTRACT_ABI     = artifact.abi;
-  CONTRACT_ADDRESS = artifact.address;
-} catch {
-  console.warn("AdvancedVoting.json not found — run `npm run deploy:local` first.");
-}
+const CONTRACT_ABI = artifact.abi;
+const CONTRACT_ADDRESS = artifact.address;
 
 // Supported chain IDs
 const SUPPORTED_CHAINS = {
