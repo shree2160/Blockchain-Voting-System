@@ -39,6 +39,32 @@
       "anonymous": false,
       "inputs": [
         {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "id",
+          "type": "uint256"
+        }
+      ],
+      "name": "CandidateRemoved",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newDeadline",
+          "type": "uint256"
+        }
+      ],
+      "name": "ElectionDeadlineUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
           "indexed": false,
           "internalType": "uint256",
           "name": "timestamp",
@@ -52,6 +78,25 @@
         }
       ],
       "name": "ElectionFinalized",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "uint256",
+          "name": "electionId",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newDeadline",
+          "type": "uint256"
+        }
+      ],
+      "name": "ElectionReset",
       "type": "event"
     },
     {
@@ -195,6 +240,11 @@
           "internalType": "uint256",
           "name": "voteCount",
           "type": "uint256"
+        },
+        {
+          "internalType": "bool",
+          "name": "isActive",
+          "type": "bool"
         }
       ],
       "stateMutability": "view",
@@ -221,6 +271,19 @@
           "internalType": "bool",
           "name": "",
           "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "electionId",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -258,6 +321,11 @@
               "internalType": "uint256",
               "name": "voteCount",
               "type": "uint256"
+            },
+            {
+              "internalType": "bool",
+              "name": "isActive",
+              "type": "bool"
             }
           ],
           "internalType": "struct AdvancedVoting.Candidate[]",
@@ -318,6 +386,32 @@
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_candidateId",
+          "type": "uint256"
+        }
+      ],
+      "name": "removeCandidate",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_durationInMinutes",
+          "type": "uint256"
+        }
+      ],
+      "name": "resetElection",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "timeRemaining",
       "outputs": [
@@ -339,6 +433,19 @@
         }
       ],
       "name": "transferAdmin",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_newDeadline",
+          "type": "uint256"
+        }
+      ],
+      "name": "updateElectionDeadline",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -377,6 +484,11 @@
     },
     {
       "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
         {
           "internalType": "address",
           "name": "",
@@ -422,5 +534,5 @@
       "type": "receive"
     }
   ],
-  "address": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
+  "address": "0x168B1E8adF2AE584749E5f95cD02b772152edDbB"
 }

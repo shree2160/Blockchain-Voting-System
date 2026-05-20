@@ -138,9 +138,14 @@ function AppInner() {
         whitelistWallet={voting.whitelistWallet}
         batchWhitelistWallets={voting.batchWhitelistWallets}
         addCandidate={voting.addCandidate}
+        removeCandidate={voting.removeCandidate}
+        updateElectionDeadline={voting.updateElectionDeadline}
+        resetElection={voting.resetElection}
         finalizeElection={voting.finalizeElection}
         isFinalized={voting.isFinalized}
         txPending={voting.txPending}
+        candidates={voting.candidates}
+        electionId={voting.electionId}
       />
 
       {/* Vote confirm overlay */}
@@ -318,15 +323,15 @@ function AppInner() {
                 <div key={i} className="skeleton" style={{ height: 340, borderRadius: 20 }} />
               ))}
             </div>
-          ) : voting.candidates.length === 0 ? (
+          ) : voting.candidates.filter(c => c.isActive).length === 0 ? (
             <div style={styles.emptyState}>
               <p style={{ color: "#5a5a5a", fontFamily: "'JetBrains Mono', monospace" }}>
-                No candidates added yet.
+                No active candidates registered.
               </p>
             </div>
           ) : (
             <div style={styles.candidatesGrid}>
-              {voting.candidates.map((c, i) => (
+              {voting.candidates.filter(c => c.isActive).map((c, i) => (
                 <div key={c.id} className="anim-fade-in-up" style={{ animationDelay: `${i * 0.08}s` }}>
                   <CandidateCard
                     candidate={c}

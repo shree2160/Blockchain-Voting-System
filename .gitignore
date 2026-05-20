@@ -1,7 +1,44 @@
+# ─── Dependencies ────────────────────────────────────────────────────────────
 node_modules/
+frontend/node_modules/
+
+# ─── Solidity / Hardhat Build Artifacts ───────────────────────────────────────
 artifacts/
 cache/
-.env
-frontend/node_modules/
+typechain/
+typechain-types/
+coverage/
+coverage.json
+
+# ─── Web Frontend Production Builds ──────────────────────────────────────────
 frontend/dist/
+out/
+.next/
+
+# ─── Secrets & Credentials (CRITICAL SECURITY) ───────────────────────────────
+.env
+.env.production
+.env.development
 *.local
+*.env.local
+
+# ─── Logs & Diagnostics ───────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ─── IDEs & Editor Configuration ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# ─── OS Specific Files ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

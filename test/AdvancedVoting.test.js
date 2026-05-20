@@ -91,7 +91,7 @@ describe("AdvancedVoting", function () {
     await contract.whitelistAnonymousWallet(voter1.address);
     await contract.connect(voter1).vote(0);
     await contract.connect(voter1).vote(1);
-    const record = await contract.voterRecords(voter1.address);
+    const record = await contract.voterRecords(0, voter1.address);
     expect(record.candidateId).to.equal(1n);
     expect(record.hasVoted).to.be.true;
   });
@@ -123,5 +123,48 @@ describe("AdvancedVoting", function () {
     expect(winnerId).to.equal(0n);
     expect(winnerName).to.equal("Alice");
     expect(votes).to.equal(2n);
+  });
+
+  // ── Admin: Dashboard Operations ──────────────────────────────────────────
+  it("allows admin to remove a candidate and blocks votes for them", async () => {
+    // Verify initial active state
+    let c = await contract.getAllCandidates();
+    expect(c[1].isActive).to.be.true; // "Bob" starts active
+    
+    // Remove "Bob"
+    await contract.removeCandidate(1);
+    
+    c = await contract.getAllCandidates();
+    expect(c[1].isActive).to.be.false; // Now inactive
+    
+    // Attempting to vote for deactivated "Bob" should revert
+    await contract.whitelistAnonymousWallet(voter1.address);
+    await expect(contract.connect(voter1).vote(1)).to.be.revertedWith(
+      "AV: candidate is inactive"
+    );
+  });
+
+  it("allows admin to update election deadline dynamically", async () => {
+    const originalDeadline = await contract.electionDeadline();
+    const newDeadline = Number(originalDeadline) + 3600; // extend by 1 hour
+    
+    await contract.updateElectionDeadline(newDeadline);
+    const updatedDeadline = await contract.electionDeadline();
+    expect(updatedDeadline).to.equal(BigInt(newDeadline));
+  });
+
+  it("allows admin to reset election to launch a new cohort", async () => {
+    // Verify initial election ID is 0
+    expect(await contract.electionId()).to.equal(0n);
+    
+    // Reset election
+    await contract.resetElection(10); // duration 10 mins
+    
+    // Verify incremented election ID
+    expect(await contract.electionId()).to.equal(1n);
+    
+    // Verify candidates are wiped out
+    const candidatesCount = await contract.getCandidateCount();
+    expect(candidatesCount).to.equal(0n);
   });
 });

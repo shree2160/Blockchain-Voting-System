@@ -23,6 +23,7 @@ contract AdvancedVoting {
         string imageUri;    // Off-chain image URI (IPFS / HTTPS)
         string pitch;       // One-line election pitch
         uint256 voteCount;  // Running tally (gas-efficient: read via getter)
+        bool    isActive;   // Flag to toggle candidacy
     }
 
     struct VoteRecord {
@@ -36,12 +37,13 @@ contract AdvancedVoting {
     uint256 public electionDeadline;
     bool    public electionFinalized; // set by admin after tallying
     address public campusAuthority;   // public key representing college registrar
+    uint256 public electionId;        // counter for sequential elections
 
     // FR-01  Privacy mapping — anonymous wallets only, never real names
     mapping(address => bool)       public validAnonymousWallets;
 
-    // FR-02  Anti-coercion — stores the current ballot per wallet
-    mapping(address => VoteRecord) public voterRecords;
+    // FR-02  Anti-coercion — stores the current ballot per wallet per electionId
+    mapping(uint256 => mapping(address => VoteRecord)) public voterRecords;
 
     Candidate[] public candidates;
 
@@ -50,6 +52,9 @@ contract AdvancedVoting {
     event VoteCast(address indexed voter, uint256 indexed candidateId, bool wasOverride, uint256 timestamp);
     event CandidateAdded(uint256 indexed id, string name);
     event ElectionFinalized(uint256 timestamp, uint256[] finalTallies);
+    event CandidateRemoved(uint256 indexed id);
+    event ElectionDeadlineUpdated(uint256 newDeadline);
+    event ElectionReset(uint256 indexed electionId, uint256 newDeadline);
 
     // ──────────────────────────────────────────────────────── Modifiers ──────
     modifier onlyAdmin() {
@@ -99,7 +104,8 @@ contract AdvancedVoting {
             name:      _name,
             imageUri:  _imageUri,
             pitch:     _pitch,
-            voteCount: 0
+            voteCount: 0,
+            isActive:  true
         }));
         emit CandidateAdded(id, _name);
     }
@@ -173,12 +179,13 @@ contract AdvancedVoting {
     function vote(uint256 _candidateId) external electionActive {
         require(validAnonymousWallets[msg.sender], "AV: wallet not authorized");
         require(_candidateId < candidates.length,  "AV: invalid candidateId");
+        require(candidates[_candidateId].isActive, "AV: candidate is inactive");
 
         bool wasOverride = false;
 
         // ── Override path ────────────────────────────────────────────────────
-        if (voterRecords[msg.sender].hasVoted) {
-            uint256 oldChoice = voterRecords[msg.sender].candidateId;
+        if (voterRecords[electionId][msg.sender].hasVoted) {
+            uint256 oldChoice = voterRecords[electionId][msg.sender].candidateId;
             // Guard: only decrement if it actually had a vote counted
             if (candidates[oldChoice].voteCount > 0) {
                 candidates[oldChoice].voteCount--;
@@ -187,7 +194,7 @@ contract AdvancedVoting {
         }
 
         // ── Apply new vote ───────────────────────────────────────────────────
-        voterRecords[msg.sender] = VoteRecord({
+        voterRecords[electionId][msg.sender] = VoteRecord({
             candidateId: _candidateId,
             hasVoted:    true,
             votedAt:     block.timestamp
@@ -220,12 +227,15 @@ contract AdvancedVoting {
     function getWinner() external view electionEnded returns (uint256 winnerId, string memory winnerName, uint256 winningVotes) {
         require(candidates.length > 0, "AV: no candidates");
         uint256 maxVotes = 0;
+        bool foundActive = false;
         for (uint256 i = 0; i < candidates.length; i++) {
-            if (candidates[i].voteCount > maxVotes) {
+            if (candidates[i].isActive && (candidates[i].voteCount >= maxVotes || !foundActive)) {
                 maxVotes = candidates[i].voteCount;
                 winnerId = i;
+                foundActive = true;
             }
         }
+        require(foundActive, "AV: no active candidates");
         winnerName   = candidates[winnerId].name;
         winningVotes = candidates[winnerId].voteCount;
     }
@@ -253,6 +263,44 @@ contract AdvancedVoting {
             tallies[i] = candidates[i].voteCount;
         }
         emit ElectionFinalized(block.timestamp, tallies);
+    }
+
+    // ─────────────────────────────────────────── Admin: Candidate & Lifecycle ──
+    /**
+     * @notice Admin removes a candidate from active display.
+     * @param _candidateId Zero-indexed position in candidates list.
+     */
+    function removeCandidate(uint256 _candidateId) external onlyAdmin {
+        require(_candidateId < candidates.length, "AV: invalid candidateId");
+        require(candidates[_candidateId].isActive, "AV: already inactive");
+        candidates[_candidateId].isActive = false;
+        emit CandidateRemoved(_candidateId);
+    }
+
+    /**
+     * @notice Admin changes the election deadline dynamically.
+     * @param _newDeadline Epoch timestamp of new end date.
+     */
+    function updateElectionDeadline(uint256 _newDeadline) external onlyAdmin {
+        require(_newDeadline > block.timestamp, "AV: deadline must be in future");
+        electionDeadline = _newDeadline;
+        emit ElectionDeadlineUpdated(_newDeadline);
+    }
+
+    /**
+     * @notice Admin resets election parameters to launch a new, fresh election.
+     * @param _durationInMinutes Duration of the new election.
+     */
+    function resetElection(uint256 _durationInMinutes) external onlyAdmin {
+        require(_durationInMinutes > 0, "AV: duration must be > 0");
+        electionId++;
+        electionDeadline = block.timestamp + (_durationInMinutes * 1 minutes);
+        electionFinalized = false;
+        
+        // Delete all old candidates to make way for new cohort
+        delete candidates;
+        
+        emit ElectionReset(electionId, electionDeadline);
     }
 
     // ─────────────────────────────────────────────── Admin: Transfer ──────

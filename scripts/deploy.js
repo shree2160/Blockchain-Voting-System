@@ -22,31 +22,7 @@ async function main() {
   console.log(`✅ AdvancedVoting deployed to: ${address}`);
   console.log(`   Election deadline: ${DURATION_MINUTES} minutes from now`);
 
-  // ── Seed candidates ───────────────────────────────────────────────────────
-  const candidates = [
-    {
-      name:  "Arjun Sharma",
-      image: "https://ipfs.io/ipfs/Qm_arjun_placeholder",
-      pitch: "Empowering every student voice on-chain",
-    },
-    {
-      name:  "Priya Patel",
-      image: "https://ipfs.io/ipfs/Qm_priya_placeholder",
-      pitch: "Transparent governance, zero corruption",
-    },
-    {
-      name:  "Rahul Verma",
-      image: "https://ipfs.io/ipfs/Qm_rahul_placeholder",
-      pitch: "Web3 infrastructure for campus welfare",
-    },
-  ];
-
-  console.log("\n📋 Adding candidates...");
-  for (const c of candidates) {
-    const tx = await contract.addCandidate(c.name, c.image, c.pitch);
-    await tx.wait();
-    console.log(`   ✓ Added: ${c.name}`);
-  }
+  console.log("\n📋 Skipping candidate seeding for production/dashboard registration.");
 
   // ── Copy ABI to frontend ──────────────────────────────────────────────────
   const artifactPath = path.join(

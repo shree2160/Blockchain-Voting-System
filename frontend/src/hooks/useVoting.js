@@ -46,6 +46,7 @@ export function useVoting() {
   const [isFinalized,  setIsFinalized]  = useState(false);
   const [winner,       setWinner]       = useState(null); // { id: number, name: string, votes: number }
   const [campusAuthority, setCampusAuthority] = useState(null);
+  const [electionId,      setElectionId]      = useState(0);
 
   // UI state
   const [loading,   setLoading]   = useState(false);
@@ -99,13 +100,16 @@ export function useVoting() {
     try {
       const contract = contractRef.current;
 
-      const [rawCandidates, rawTimeLeft, finalized] = await Promise.all([
+      const [rawCandidates, rawTimeLeft, finalized, rawElectionId] = await Promise.all([
         contract.getAllCandidates(),
         contract.timeRemaining(),
         contract.electionFinalized(),
+        contract.electionId(),
       ]);
 
       const isEnded = Number(rawTimeLeft) === 0 || finalized;
+      const currentElectionId = Number(rawElectionId);
+      setElectionId(currentElectionId);
 
       // Normalise BigInt → Number for React state
       setCandidates(
@@ -115,6 +119,7 @@ export function useVoting() {
           imageUri:  c.imageUri,
           pitch:     c.pitch,
           voteCount: Number(c.voteCount),
+          isActive:  c.isActive,
         }))
       );
 
@@ -141,7 +146,7 @@ export function useVoting() {
       if (addr) {
         const [whitelist, record, adminAddr, authorityAddr] = await Promise.all([
           contract.validAnonymousWallets(addr),
-          contract.voterRecords(addr),
+          contract.voterRecords(currentElectionId, addr),
           contract.admin(),
           contract.campusAuthority(),
         ]);
@@ -330,6 +335,69 @@ export function useVoting() {
     }
   }, [account, fetchContractData]);
 
+  // ── Admin: remove candidate ─────────────────────────────────────────────
+  const removeCandidate = useCallback(async (candidateId) => {
+    if (!contractRef.current) return { success: false };
+    clearError();
+    setTxPending(true);
+    try {
+      const tx = await contractRef.current.removeCandidate(candidateId);
+      await tx.wait();
+      await fetchContractData(account);
+      return { success: true };
+    } catch (err) {
+      const msg = err?.reason || err.message || "Remove candidate failed.";
+      setError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setTxPending(false);
+    }
+  }, [account, fetchContractData]);
+
+  // ── Admin: update election deadline ─────────────────────────────────────
+  const updateElectionDeadline = useCallback(async (durationInMinutes) => {
+    if (!contractRef.current) return { success: false };
+    clearError();
+    setTxPending(true);
+    try {
+      // Get block details to accurately extend time relative to node epoch
+      const provider = providerRef.current || new ethers.BrowserProvider(window.ethereum);
+      const currentBlock = await provider.getBlock("latest");
+      const currentTimestamp = currentBlock.timestamp;
+      const newDeadline = currentTimestamp + (durationInMinutes * 60);
+
+      const tx = await contractRef.current.updateElectionDeadline(newDeadline);
+      await tx.wait();
+      await fetchContractData(account);
+      return { success: true };
+    } catch (err) {
+      const msg = err?.reason || err.message || "Update deadline failed.";
+      setError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setTxPending(false);
+    }
+  }, [account, fetchContractData]);
+
+  // ── Admin: reset election ────────────────────────────────────────────────
+  const resetElection = useCallback(async (durationInMinutes) => {
+    if (!contractRef.current) return { success: false };
+    clearError();
+    setTxPending(true);
+    try {
+      const tx = await contractRef.current.resetElection(durationInMinutes);
+      await tx.wait();
+      await fetchContractData(account);
+      return { success: true };
+    } catch (err) {
+      const msg = err?.reason || err.message || "Reset election failed.";
+      setError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setTxPending(false);
+    }
+  }, [account, fetchContractData]);
+
   // ── Admin: finalize election ────────────────────────────────────────────
   const finalizeElection = useCallback(async () => {
     if (!contractRef.current) return { success: false };
@@ -428,6 +496,7 @@ export function useVoting() {
     totalVotes,
     winner,
     campusAuthority,
+    electionId,
 
     // Actions
     castVote,
@@ -436,6 +505,9 @@ export function useVoting() {
     registerVoter,
     generateMockSignature,
     addCandidate,
+    removeCandidate,
+    updateElectionDeadline,
+    resetElection,
     finalizeElection,
 
     // UI state
