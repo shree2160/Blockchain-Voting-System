@@ -4,12 +4,12 @@
   "description": "CryptoVote Campus V2.0 — Hardhat backend",
   "private": true,
   "scripts": {
-    "compile":        "hardhat compile",
-    "test":           "hardhat test",
-    "node":           "hardhat node",
-    "deploy:local":   "hardhat run scripts/deploy.js --network localhost",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
-    "verify":         "hardhat verify --network sepolia"
+    "verify": "hardhat verify --network sepolia"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",

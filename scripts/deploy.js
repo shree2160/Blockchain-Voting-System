@@ -15,7 +15,7 @@ async function main() {
   const DURATION_MINUTES = Number(process.env.ELECTION_DURATION_MINUTES) || 60;
 
   const AdvancedVoting = await hre.ethers.getContractFactory("AdvancedVoting");
-  const contract = await AdvancedVoting.deploy(DURATION_MINUTES);
+  const contract = await AdvancedVoting.deploy(DURATION_MINUTES, deployer.address);
   await contract.waitForDeployment();
 
   const address = await contract.getAddress();

@@ -9,7 +9,7 @@ import { useLocalization } from "../context/LocalizationContext";
  *  • Add a new candidate (name + pitch)
  *  • Finalize election (irreversible)
  */
-export default function AdminPanel({ isOpen, onClose, whitelistWallet, addCandidate, finalizeElection, isFinalized, txPending }) {
+export default function AdminPanel({ isOpen, onClose, whitelistWallet, batchWhitelistWallets, addCandidate, finalizeElection, isFinalized, txPending }) {
   const { t } = useLocalization();
 
   const [walletInput,    setWalletInput]    = useState("");
@@ -26,12 +26,36 @@ export default function AdminPanel({ isOpen, onClose, whitelistWallet, addCandid
 
   const handleWhitelist = async () => {
     if (!walletInput.trim()) return;
-    const res = await whitelistWallet(walletInput.trim());
-    if (res.success) {
-      showFeedback(`✓ Whitelisted ${walletInput.slice(0,10)}...`);
-      setWalletInput("");
+
+    // Split by commas, spaces, or newlines
+    const rawAddresses = walletInput.split(/[\s,\n]+/);
+    const cleanAddresses = rawAddresses
+      .map((addr) => addr.trim())
+      .filter((addr) => addr.startsWith("0x") && addr.length === 42);
+
+    if (cleanAddresses.length === 0) {
+      showFeedback("✗ No valid Ethereum addresses (0x...) found.", "error");
+      return;
+    }
+
+    if (cleanAddresses.length === 1) {
+      // Single address flow
+      const res = await whitelistWallet(cleanAddresses[0]);
+      if (res.success) {
+        showFeedback(`✓ Whitelisted: ${cleanAddresses[0].slice(0, 10)}...`);
+        setWalletInput("");
+      } else {
+        showFeedback(`✗ ${res.error}`, "error");
+      }
     } else {
-      showFeedback(`✗ ${res.error}`, "error");
+      // Batch address flow
+      const res = await batchWhitelistWallets(cleanAddresses);
+      if (res.success) {
+        showFeedback(`✓ Batch whitelisted ${cleanAddresses.length} wallets!`);
+        setWalletInput("");
+      } else {
+        showFeedback(`✗ ${res.error}`, "error");
+      }
     }
   };
 
@@ -88,11 +112,19 @@ export default function AdminPanel({ isOpen, onClose, whitelistWallet, addCandid
         {/* ── Whitelist voter ── */}
         <section style={styles.section}>
           <label style={styles.label}>{t("whitelistAddress")}</label>
-          <input
+          <textarea
             className="input"
-            placeholder="0x..."
+            placeholder="0x...&#10;For multiple: separate with commas, spaces or newlines."
             value={walletInput}
             onChange={(e) => setWalletInput(e.target.value)}
+            rows={4}
+            style={{
+              resize: "vertical",
+              minHeight: "100px",
+              lineHeight: "1.4",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: "0.82rem"
+            }}
           />
           <button
             className="btn btn-primary"

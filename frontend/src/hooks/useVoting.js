@@ -44,6 +44,8 @@ export function useVoting() {
   const [isWhitelisted, setIsWhitelisted] = useState(false);
   const [timeLeft,     setTimeLeft]     = useState(0);
   const [isFinalized,  setIsFinalized]  = useState(false);
+  const [winner,       setWinner]       = useState(null); // { id: number, name: string, votes: number }
+  const [campusAuthority, setCampusAuthority] = useState(null);
 
   // UI state
   const [loading,   setLoading]   = useState(false);
@@ -61,6 +63,35 @@ export function useVoting() {
   const getContract = (signerOrProvider) =>
     new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signerOrProvider);
 
+  /**
+   * Finds MetaMask's EIP-1193 provider specifically.
+   *
+   * When multiple wallets are installed (e.g. Trust Wallet + MetaMask),
+   * each wallet injects itself into window.ethereum.providers[].
+   * We pick the one with isMetaMask = true and isTrust = false.
+   * Falls back to window.ethereum if it IS MetaMask (single-wallet case).
+   */
+  const getMetaMaskProvider = () => {
+    const { ethereum } = window;
+    if (!ethereum) return null;
+
+    // Multi-wallet scenario: providers array exists
+    if (Array.isArray(ethereum.providers)) {
+      // Prefer MetaMask that is NOT Trust Wallet
+      const mm = ethereum.providers.find(
+        (p) => p.isMetaMask && !p.isTrust && !p.isTrustWallet
+      );
+      if (mm) return mm;
+      // Fallback: any MetaMask provider
+      return ethereum.providers.find((p) => p.isMetaMask) ?? null;
+    }
+
+    // Single-wallet: window.ethereum is MetaMask
+    if (ethereum.isMetaMask) return ethereum;
+
+    return null;
+  };
+
   // ── Load contract data ──────────────────────────────────────────────────
   const fetchContractData = useCallback(async (addr) => {
     if (!contractRef.current || !CONTRACT_ADDRESS) return;
@@ -73,6 +104,8 @@ export function useVoting() {
         contract.timeRemaining(),
         contract.electionFinalized(),
       ]);
+
+      const isEnded = Number(rawTimeLeft) === 0 || finalized;
 
       // Normalise BigInt → Number for React state
       setCandidates(
@@ -88,11 +121,29 @@ export function useVoting() {
       setTimeLeft(Number(rawTimeLeft));
       setIsFinalized(finalized);
 
+      // Fetch winner if the election is ended
+      if (isEnded) {
+        try {
+          const rawWinner = await contract.getWinner();
+          setWinner({
+            id:    Number(rawWinner.winnerId),
+            name:  rawWinner.winnerName,
+            votes: Number(rawWinner.winningVotes),
+          });
+        } catch (wErr) {
+          console.warn("Could not retrieve winner (might have no votes/candidates):", wErr);
+          setWinner(null);
+        }
+      } else {
+        setWinner(null);
+      }
+
       if (addr) {
-        const [whitelist, record, adminAddr] = await Promise.all([
+        const [whitelist, record, adminAddr, authorityAddr] = await Promise.all([
           contract.validAnonymousWallets(addr),
           contract.voterRecords(addr),
           contract.admin(),
+          contract.campusAuthority(),
         ]);
         setIsWhitelisted(whitelist);
         setVoterRecord({
@@ -100,6 +151,7 @@ export function useVoting() {
           candidateId: Number(record.candidateId),
         });
         setIsAdmin(adminAddr.toLowerCase() === addr.toLowerCase());
+        setCampusAuthority(authorityAddr);
       }
     } catch (err) {
       console.error("fetchContractData error:", err);
@@ -111,14 +163,23 @@ export function useVoting() {
 
   // ── Connect wallet ──────────────────────────────────────────────────────
   const connectWallet = useCallback(async () => {
-    if (!window.ethereum) {
-      setError("MetaMask not detected. Please install it.");
+    const mmProvider = getMetaMaskProvider();
+
+    if (!mmProvider) {
+      setError(
+        window.ethereum
+          ? "MetaMask not found. Trust Wallet detected — please use the MetaMask extension instead."
+          : "MetaMask not detected. Please install the MetaMask browser extension."
+      );
       return;
     }
+
     clearError();
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
+      // Request accounts from MetaMask specifically
+      const accounts = await mmProvider.request({ method: "eth_requestAccounts" });
+
+      const provider = new ethers.BrowserProvider(mmProvider);
       const signer   = await provider.getSigner();
       const network  = await provider.getNetwork();
       const cid      = Number(network.chainId);
@@ -127,18 +188,26 @@ export function useVoting() {
       signerRef.current    = signer;
       contractRef.current  = getContract(signer);
 
+      // Store the raw MM provider for event listeners
+      providerRef._raw = mmProvider;
+
       setAccount(accounts[0]);
       setChainId(cid);
 
       if (!SUPPORTED_CHAINS[cid]) {
-        setError(`Unsupported network. Please switch to Sepolia or Localhost.`);
+        setError(`Unsupported network (chainId ${cid}). Please switch to Hardhat Localhost (31337) or Sepolia (11155111).`);
         return;
       }
 
       await fetchContractData(accounts[0]);
     } catch (err) {
       console.error("connectWallet error:", err);
-      setError(err.message || "Wallet connection failed.");
+      // EIP-1193 user rejection code
+      if (err.code === 4001) {
+        setError("Connection rejected. Please approve MetaMask to continue.");
+      } else {
+        setError(err.message || "Wallet connection failed.");
+      }
     }
   }, [fetchContractData]);
 
@@ -187,6 +256,61 @@ export function useVoting() {
     }
   }, []);
 
+  // ── Admin: batch whitelist wallets ──────────────────────────────────────
+  const batchWhitelistWallets = useCallback(async (wallets) => {
+    if (!contractRef.current) return { success: false };
+    clearError();
+    setTxPending(true);
+    try {
+      const tx = await contractRef.current.batchWhitelistWallets(wallets);
+      await tx.wait();
+      return { success: true };
+    } catch (err) {
+      const msg = err?.reason || err.message || "Batch whitelist failed.";
+      setError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setTxPending(false);
+    }
+  }, []);
+
+  // ── Voter: Self-Register Cryptographically ──────────────────────────────
+  const registerVoter = useCallback(async (signature) => {
+    if (!contractRef.current) return { success: false };
+    clearError();
+    setTxPending(true);
+    try {
+      const tx = await contractRef.current.registerVoter(signature);
+      await tx.wait();
+      await fetchContractData(account); // Refresh whitelisting state
+      return { success: true };
+    } catch (err) {
+      const msg = err?.reason || err.message || "Registration failed.";
+      setError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setTxPending(false);
+    }
+  }, [account, fetchContractData]);
+
+  // ── Mock College Signing Server helper (Offline) ──────────────────────────
+  const generateMockSignature = useCallback(async (voterAddr) => {
+    try {
+      // Use standard development private key for Account #0 (Campus Authority key)
+      const mockAuthorityWallet = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+      
+      // Hash the voter address matching solidity's keccak256(abi.encodePacked(voter))
+      const messageHash = ethers.solidityPackedKeccak256(["address"], [voterAddr]);
+      
+      // Sign the hash (Ethereum signed message format matching Solidity ecrecover)
+      const signature = await mockAuthorityWallet.signMessage(ethers.getBytes(messageHash));
+      return signature;
+    } catch (err) {
+      console.error("Signature generation failed:", err);
+      return null;
+    }
+  }, []);
+
   // ── Admin: add candidate ────────────────────────────────────────────────
   const addCandidate = useCallback(async (name, imageUri, pitch) => {
     if (!contractRef.current) return { success: false };
@@ -226,8 +350,11 @@ export function useVoting() {
   }, []);
 
   // ── MetaMask event listeners ────────────────────────────────────────────
+  // Attach to the MetaMask provider specifically, not window.ethereum
+  // (which Trust Wallet may have overridden)
   useEffect(() => {
-    if (!window.ethereum) return;
+    const mmProvider = getMetaMaskProvider();
+    if (!mmProvider) return;
 
     const handleAccountsChanged = async (accounts) => {
       if (accounts.length === 0) {
@@ -247,11 +374,11 @@ export function useVoting() {
 
     const handleChainChanged = () => window.location.reload();
 
-    window.ethereum.on("accountsChanged", handleAccountsChanged);
-    window.ethereum.on("chainChanged", handleChainChanged);
+    mmProvider.on("accountsChanged", handleAccountsChanged);
+    mmProvider.on("chainChanged", handleChainChanged);
     return () => {
-      window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
-      window.ethereum.removeListener("chainChanged", handleChainChanged);
+      mmProvider.removeListener("accountsChanged", handleAccountsChanged);
+      mmProvider.removeListener("chainChanged", handleChainChanged);
     };
   }, [fetchContractData]);
 
@@ -299,10 +426,15 @@ export function useVoting() {
     timeLeft,
     isFinalized,
     totalVotes,
+    winner,
+    campusAuthority,
 
     // Actions
     castVote,
     whitelistWallet,
+    batchWhitelistWallets,
+    registerVoter,
+    generateMockSignature,
     addCandidate,
     finalizeElection,
 

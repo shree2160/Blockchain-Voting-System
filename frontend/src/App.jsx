@@ -37,6 +37,33 @@ function AppInner() {
   const [pendingVote,    setPendingVote]    = useState(null); // candidate to confirm
   const [adminOpen,      setAdminOpen]      = useState(false);
   const [toasts,         setToasts]         = useState([]);
+  const [studentId,        setStudentId]        = useState("");
+  const [voucherSignature, setVoucherSignature] = useState("");
+
+  const handleGetVoucher = async () => {
+    if (!studentId.trim()) return;
+    addToast("🔄 Authenticating student credentials...", "info");
+    const sig = await voting.generateMockSignature(voting.account);
+    if (sig) {
+      setVoucherSignature(sig);
+      addToast("🔑 Signature voucher received off-chain!", "success");
+    } else {
+      addToast("✗ Off-chain registration signature failed.", "error");
+    }
+  };
+
+  const handleSelfRegister = async () => {
+    if (!voucherSignature) return;
+    addToast("⏳ Validating voucher on blockchain...", "info");
+    const res = await voting.registerVoter(voucherSignature);
+    if (res.success) {
+      addToast("🎉 Wallet successfully registered and whitelisted on-chain!", "success");
+      setVoucherSignature("");
+      setStudentId("");
+    } else {
+      addToast(`✗ Registration rejected: ${res.error}`, "error");
+    }
+  };
 
   // ── Toast helper ──────────────────────────────────────────────────────
   const addToast = (msg, type = "info") => {
@@ -109,6 +136,7 @@ function AppInner() {
         isOpen={adminOpen}
         onClose={() => setAdminOpen(false)}
         whitelistWallet={voting.whitelistWallet}
+        batchWhitelistWallets={voting.batchWhitelistWallets}
         addCandidate={voting.addCandidate}
         finalizeElection={voting.finalizeElection}
         isFinalized={voting.isFinalized}
@@ -182,9 +210,72 @@ function AppInner() {
             </button>
           )}
 
-          {/* Not whitelisted warning */}
+          {/* Cryptographic Voter Self-Registration (ECDSA) Portal */}
           {voting.account && !voting.isWhitelisted && (
-            <div style={styles.warnBanner}>{t("notWhitelisted")}</div>
+            <div style={styles.selfRegCard} className="anim-fade-in-up">
+              <h3 style={styles.selfRegTitle}>🎓 Student Verification Portal</h3>
+              <p style={styles.selfRegSub}>
+                To maintain 100% privacy, verify your student status off-chain. 
+                The campus registration authority will sign your anonymous wallet address to authorize your vote.
+              </p>
+              
+              <div style={styles.selfRegForm}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", textAlign: "left" }}>
+                  <label style={styles.selfRegLabel}>ANONYMOUS WALLET</label>
+                  <input 
+                    className="input" 
+                    readOnly 
+                    value={voting.account} 
+                    style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "0.82rem", background: "rgba(255,255,255,0.03)" }}
+                  />
+                </div>
+                
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", marginTop: 12, textAlign: "left" }}>
+                  <label style={styles.selfRegLabel}>STUDENT ID (Mock SSO login)</label>
+                  <input 
+                    className="input" 
+                    placeholder="Enter Student ID (e.g. S10245)" 
+                    value={studentId}
+                    onChange={(e) => setStudentId(e.target.value)}
+                  />
+                </div>
+
+                {!voucherSignature ? (
+                  <button 
+                    className="btn btn-secondary" 
+                    disabled={!studentId.trim() || voting.txPending}
+                    onClick={handleGetVoucher}
+                    style={{ marginTop: 16, width: "100%", padding: "10px 0" }}
+                  >
+                    🔒 1. Get Campus Signature Voucher
+                  </button>
+                ) : (
+                  <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+                    <div style={{ background: "rgba(0, 230, 118, 0.08)", border: "1px solid #00e676", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 4, textAlign: "left" }}>
+                      <span style={{ fontSize: "0.75rem", fontFamily: "'JetBrains Mono', monospace", color: "#00e676", fontWeight: "bold" }}>✓ SIGNATURE VOUCHER RECEIVED</span>
+                      <span style={{ fontSize: "0.7rem", fontFamily: "'JetBrains Mono', monospace", color: "#a5d6a7", overflowWrap: "anywhere" }}>
+                        {voucherSignature.slice(0, 48)}...
+                      </span>
+                    </div>
+                    <button 
+                      className="btn btn-primary" 
+                      disabled={voting.txPending}
+                      onClick={handleSelfRegister}
+                      style={{ width: "100%", padding: "12px 0" }}
+                    >
+                      🚀 2. Register Wallet on Blockchain
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: "0.75rem", padding: "4px", marginTop: 4, width: "60px", alignSelf: "center" }}
+                      onClick={() => setVoucherSignature("")}
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* My vote status */}
@@ -193,6 +284,19 @@ function AppInner() {
               {voting.voterRecord.hasVoted
                 ? <>✓ {t("youVotedFor")} <strong style={{ color: "#ff6b00" }}>{voting.candidates[voting.voterRecord.candidateId]?.name}</strong></>
                 : <>{t("noVoteYet")}</>}
+            </div>
+          )}
+
+          {/* Winner announcement celebration banner */}
+          {voting.winner && (
+            <div className="winner-card anim-fade-in-up">
+              <div className="winner-crown">🏆</div>
+              <h3 className="winner-title">{t("winner")}</h3>
+              <div className="winner-name">{voting.winner.name}</div>
+              <p className="winner-tally">
+                {voting.winner.votes} {t("votes")} ({voting.totalVotes > 0 ? ((voting.winner.votes / voting.totalVotes) * 100).toFixed(1) : 0}%)
+              </p>
+              <div className="winner-stripe" />
             </div>
           )}
 
@@ -432,5 +536,39 @@ const styles = {
     paddingTop: 24,
     borderTop: "1px solid #1e1e1e",
     marginTop: 24,
+  },
+  selfRegCard: {
+    background: "linear-gradient(135deg, rgba(255,107,0,0.06) 0%, rgba(0,0,0,0) 100%)",
+    border: "1px solid rgba(255,107,0,0.2)",
+    borderRadius: 20,
+    padding: 24,
+    maxWidth: 500,
+    width: "100%",
+    marginTop: 16,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+  },
+  selfRegTitle: {
+    fontSize: "1.15rem",
+    fontWeight: 700,
+    color: "#fff",
+    margin: "0 0 8px 0",
+  },
+  selfRegSub: {
+    fontSize: "0.82rem",
+    color: "#9a9a9a",
+    lineHeight: 1.5,
+    margin: "0 0 20px 0",
+  },
+  selfRegForm: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+  },
+  selfRegLabel: {
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: "0.68rem",
+    letterSpacing: "1.5px",
+    color: "#ff6b00",
+    fontWeight: "bold",
   },
 };

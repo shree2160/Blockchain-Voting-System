@@ -8,7 +8,7 @@ describe("AdvancedVoting", function () {
   beforeEach(async () => {
     [admin, voter1, voter2, stranger] = await hre.ethers.getSigners();
     const Factory = await hre.ethers.getContractFactory("AdvancedVoting");
-    contract = await Factory.deploy(DURATION);
+    contract = await Factory.deploy(DURATION, admin.address);
     await contract.waitForDeployment();
 
     // Add two candidates
@@ -37,6 +37,23 @@ describe("AdvancedVoting", function () {
     await contract.batchWhitelistWallets([voter1.address, voter2.address]);
     expect(await contract.validAnonymousWallets(voter1.address)).to.be.true;
     expect(await contract.validAnonymousWallets(voter2.address)).to.be.true;
+  });
+
+  it("allows voter to register with a valid signature from campusAuthority", async () => {
+    const messageHash = hre.ethers.solidityPackedKeccak256(["address"], [voter1.address]);
+    const signature = await admin.signMessage(hre.ethers.getBytes(messageHash));
+    
+    await contract.connect(voter1).registerVoter(signature);
+    expect(await contract.validAnonymousWallets(voter1.address)).to.be.true;
+  });
+
+  it("rejects voter self-registration with an invalid signature", async () => {
+    const messageHash = hre.ethers.solidityPackedKeccak256(["address"], [voter1.address]);
+    const signature = await stranger.signMessage(hre.ethers.getBytes(messageHash));
+    
+    await expect(
+      contract.connect(voter1).registerVoter(signature)
+    ).to.be.revertedWith("AV: invalid campus authorization");
   });
 
   // ── Voting ────────────────────────────────────────────────────────────────

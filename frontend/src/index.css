@@ -374,3 +374,69 @@ body::after {
 .w-full      { width: 100%; }
 .mt-md       { margin-top: var(--space-md); }
 .mt-lg       { margin-top: var(--space-lg); }
+
+/* ── Winner Card ───────────────────────────────────────────────────────── */
+.winner-card {
+  background: linear-gradient(135deg, rgba(255, 107, 0, 0.12) 0%, rgba(255, 50, 0, 0.02) 100%);
+  border: 2px solid var(--color-orange);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl) var(--space-lg);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 600px;
+  box-shadow: 0 20px 40px rgba(255, 107, 0, 0.1), inset 0 1px 0 rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+}
+
+.winner-crown {
+  font-size: 3.5rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 12px var(--color-orange));
+  animation: float 3s ease-in-out infinite;
+}
+
+.winner-title {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  color: var(--color-orange-lt);
+  margin: 0;
+}
+
+.winner-name {
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-weight: 900;
+  color: var(--color-text-primary);
+  font-family: var(--font-main);
+  text-shadow: 0 4px 12px rgba(0,0,0,0.6);
+  margin: 4px 0;
+}
+
+.winner-tally {
+  font-size: 0.95rem;
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
+.winner-stripe {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, var(--color-danger), var(--color-orange));
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+

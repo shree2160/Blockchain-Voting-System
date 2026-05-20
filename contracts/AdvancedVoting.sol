@@ -35,6 +35,7 @@ contract AdvancedVoting {
     address public admin;
     uint256 public electionDeadline;
     bool    public electionFinalized; // set by admin after tallying
+    address public campusAuthority;   // public key representing college registrar
 
     // FR-01  Privacy mapping — anonymous wallets only, never real names
     mapping(address => bool)       public validAnonymousWallets;
@@ -70,11 +71,14 @@ contract AdvancedVoting {
     // ─────────────────────────────────────────────────────── Constructor ──────
     /**
      * @param _durationInMinutes  How long the election window is open (from deploy).
+     * @param _campusAuthority    The public key representing the off-chain registration server.
      */
-    constructor(uint256 _durationInMinutes) {
+    constructor(uint256 _durationInMinutes, address _campusAuthority) {
         require(_durationInMinutes > 0, "AV: duration must be > 0");
+        require(_campusAuthority != address(0), "AV: authority address invalid");
         admin            = msg.sender;
         electionDeadline = block.timestamp + (_durationInMinutes * 1 minutes);
+        campusAuthority  = _campusAuthority;
     }
 
     // ─────────────────────────────────────────────── Candidate Management ──────
@@ -101,6 +105,36 @@ contract AdvancedVoting {
     }
 
     // ─────────────────────────────────────────────── Voter Whitelisting ──────
+    /**
+     * @notice Cryptographic Voter Self-Registration (ECDSA)
+     * @param _signature Signature generated off-chain by the college registrar.
+     */
+    function registerVoter(bytes calldata _signature) external electionActive {
+        require(!validAnonymousWallets[msg.sender], "AV: already whitelisted");
+        
+        // Hash the voter's address
+        bytes32 messageHash = keccak256(abi.encodePacked(msg.sender));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+        
+        // Recover signer using ecrecover
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+        address signer = ecrecover(ethSignedMessageHash, v, r, s);
+        
+        require(signer == campusAuthority, "AV: invalid campus authorization");
+        
+        validAnonymousWallets[msg.sender] = true;
+        emit WalletWhitelisted(msg.sender, block.timestamp);
+    }
+
+    function splitSignature(bytes memory sig) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
+        require(sig.length == 65, "AV: invalid signature length");
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+            v := byte(0, mload(add(sig, 96)))
+        }
+    }
+
     /**
      * @notice FR-01  Whitelist a single anonymous wallet.
      * @param _wallet The brand-new, empty wallet address provided by the student.
