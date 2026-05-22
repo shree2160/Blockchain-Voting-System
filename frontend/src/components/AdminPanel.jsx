@@ -105,10 +105,10 @@ export default function AdminPanel({
   };
 
   const handleEndNow = async () => {
-    // 0.05 mins = 3 seconds
-    const res = await updateElectionDeadline(0.05);
+    // 0.5 mins = 30 seconds (Accounts for 15s Sepolia block time)
+    const res = await updateElectionDeadline(0.5);
     if (res.success) {
-      showFeedback(`✓ Election ending in 3 seconds...`);
+      showFeedback(`✓ Election ending in ~30 seconds...`);
     } else {
       showFeedback(`✗ ${res.error}`, "error");
     }
@@ -333,7 +333,7 @@ export default function AdminPanel({
             disabled={txPending}
             style={{ fontSize: "0.82rem", width: "100%", marginTop: 8 }}
           >
-            ⏹️ End Election Now (3s)
+            ⏹️ End Election Now (30s)
           </button>
         </section>
 
