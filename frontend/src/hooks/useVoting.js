@@ -224,7 +224,7 @@ export function useVoting() {
     }
   }, [fetchContractData]);
 
-  // ── Cast / override vote (auto-routes: gasless if low ETH, direct otherwise) ──
+  // ── Cast / override vote (always tries EIP-712 gasless path first; falls back to direct if relayer fails) ──
   const castVote = useCallback(async (candidateId) => {
     if (!account) {
       setError("Please connect your wallet first.");
@@ -233,34 +233,38 @@ export function useVoting() {
     clearError();
     setTxPending(true);
     try {
-      // Check if wallet has enough ETH for gas
-      const provider = providerRef.current || new ethers.BrowserProvider(window.ethereum);
-      const balance = await provider.getBalance(account);
-      const hasGas = balance > ethers.parseEther("0.0005"); // ~0.0005 ETH threshold
+      // 1. Prioritize Gasless Meta-Transaction EIP-712 Voting for ALL wallets
+      const res = await castGaslessVote(candidateId);
+      if (res.success) {
+        return res;
+      }
+      // If relayer returned an explicit error (e.g. not whitelisted), throw it to prevent silent failure
+      if (res.error) {
+        throw new Error(res.error);
+      }
+    } catch (err) {
+      console.warn("Gasless vote failed, checking fallback to direct path:", err.message);
+      setError(err.message);
+      return { success: false, error: err.message };
+    }
 
-      if (hasGas && contractRef.current && signerRef.current) {
-        // ── Direct vote path (voter pays gas) ──────────────────────────
+    // 2. Fallback to Direct Vote if gasless fails or is not applicable
+    try {
+      if (contractRef.current && signerRef.current) {
         const tx = await contractRef.current.vote(candidateId);
         await tx.wait();
         await fetchContractData(account);
         return { success: true, wasOverride: voterRecord.hasVoted, gasless: false };
-      } else {
-        // ── Gasless meta-transaction path (relayer pays gas) ───────────
-        return await castGaslessVote(candidateId);
       }
-    } catch (err) {
-      console.error("castVote error:", err);
-      const msg =
-        err?.reason ||
-        err?.data?.message ||
-        err.message ||
-        "Transaction failed.";
+    } catch (directErr) {
+      console.error("Direct fallback vote error:", directErr);
+      const msg = directErr?.reason || directErr?.data?.message || directErr.message || "Transaction failed.";
       setError(msg);
       return { success: false, error: msg };
     } finally {
       setTxPending(false);
     }
-  }, [account, voterRecord.hasVoted, fetchContractData]);
+  }, [account, voterRecord.hasVoted, fetchContractData, castGaslessVote]);
 
   // ── Gasless EIP-712 Meta-Transaction Vote ──────────────────────────────
   const castGaslessVote = useCallback(async (candidateId) => {
