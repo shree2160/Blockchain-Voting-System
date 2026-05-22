@@ -229,7 +229,7 @@ contract AdvancedVoting {
         uint256 maxVotes = 0;
         bool foundActive = false;
         for (uint256 i = 0; i < candidates.length; i++) {
-            if (candidates[i].isActive && (candidates[i].voteCount >= maxVotes || !foundActive)) {
+            if (candidates[i].isActive && (candidates[i].voteCount > maxVotes || !foundActive)) {
                 maxVotes = candidates[i].voteCount;
                 winnerId = i;
                 foundActive = true;

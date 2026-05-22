@@ -178,7 +178,7 @@ function AppInner() {
           {/* Stat pills */}
           <div style={styles.statsRow}>
             <StatPill label={t("totalVotes")} value={voting.totalVotes} />
-            <StatPill label={t("candidates")} value={voting.candidates.length} accent="#9a9a9a" />
+            <StatPill label={t("candidates")} value={voting.candidates.filter(c => c.isActive).length} accent="#9a9a9a" />
             <StatPill
               label={electionActive ? t("electionEndsIn") : t("electionEnded")}
               value={electionActive ? formatTime(voting.timeLeft) : "—"}
