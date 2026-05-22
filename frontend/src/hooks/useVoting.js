@@ -399,6 +399,7 @@ export function useVoting() {
       const tx = await contractRef.current.finalizeElection();
       await tx.wait();
       setIsFinalized(true);
+      await fetchContractData(account);
       return { success: true };
     } catch (err) {
       const msg = err?.reason || err.message || "Finalize failed.";
@@ -407,7 +408,26 @@ export function useVoting() {
     } finally {
       setTxPending(false);
     }
-  }, []);
+  }, [account, fetchContractData]);
+
+  // ── Admin: transfer admin rights ────────────────────────────────────────
+  const transferAdmin = useCallback(async (newAdminAddr) => {
+    if (!contractRef.current) return { success: false };
+    clearError();
+    setTxPending(true);
+    try {
+      const tx = await contractRef.current.transferAdmin(newAdminAddr);
+      await tx.wait();
+      await fetchContractData(account);
+      return { success: true };
+    } catch (err) {
+      const msg = err?.reason || err.message || "Transfer Admin failed.";
+      setError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setTxPending(false);
+    }
+  }, [account, fetchContractData]);
 
   // ── MetaMask event listeners ────────────────────────────────────────────
   // Attach to the MetaMask provider specifically, not window.ethereum
@@ -501,6 +521,7 @@ export function useVoting() {
     updateElectionDeadline,
     resetElection,
     finalizeElection,
+    transferAdmin,
 
     // UI state
     loading,

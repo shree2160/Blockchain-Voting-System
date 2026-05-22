@@ -142,6 +142,7 @@ function AppInner() {
         updateElectionDeadline={voting.updateElectionDeadline}
         resetElection={voting.resetElection}
         finalizeElection={voting.finalizeElection}
+        transferAdmin={voting.transferAdmin}
         isFinalized={voting.isFinalized}
         txPending={voting.txPending}
         candidates={voting.candidates}

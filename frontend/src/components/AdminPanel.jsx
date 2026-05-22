@@ -14,6 +14,7 @@ export default function AdminPanel({
   updateElectionDeadline,
   resetElection,
   finalizeElection,
+  transferAdmin,
   isFinalized,
   txPending,
   candidates,
@@ -29,6 +30,8 @@ export default function AdminPanel({
   const [deadlineMinutes,    setDeadlineMinutes]    = useState("60");
   const [newElectionMinutes, setNewElectionMinutes] = useState("60");
   const [confirmReset,       setConfirmReset]       = useState(false);
+  const [newAdminInput,      setNewAdminInput]      = useState("");
+  const [confirmTransfer,    setConfirmTransfer]    = useState(false);
   const [feedback,           setFeedback]           = useState(null);
 
   const showFeedback = (msg, type = "success") => {
@@ -131,6 +134,20 @@ export default function AdminPanel({
     } else {
       showFeedback(`✗ ${res.error}`, "error");
       setConfirmFinalize(false);
+    }
+  };
+
+  const handleTransferAdmin = async () => {
+    if (!newAdminInput.trim()) return;
+    if (!confirmTransfer) { setConfirmTransfer(true); return; }
+    const res = await transferAdmin(newAdminInput.trim());
+    if (res.success) {
+      showFeedback("👑 Admin rights successfully transferred!");
+      setNewAdminInput("");
+      setConfirmTransfer(false);
+    } else {
+      showFeedback(`✗ ${res.error}`, "error");
+      setConfirmTransfer(false);
     }
   };
 
@@ -342,6 +359,40 @@ export default function AdminPanel({
               </button>
             )}
           </div>
+        </section>
+
+        <div className="divider" />
+
+        {/* ── Transfer Admin Rights ── */}
+        <section style={styles.section}>
+          <label style={styles.label}>Transfer Admin Rights</label>
+          <p style={{ color: "#8a8a8a", fontSize: "0.78rem", marginBottom: 8 }}>
+            Permanently transfer all admin privileges to another wallet address.
+          </p>
+          <input
+            className="input"
+            placeholder="New Admin Address (0x...)"
+            value={newAdminInput}
+            onChange={(e) => setNewAdminInput(e.target.value)}
+            style={{ marginBottom: 8, fontSize: "0.82rem", padding: "8px 10px" }}
+          />
+          <button
+            className="btn btn-danger"
+            onClick={handleTransferAdmin}
+            disabled={txPending || !newAdminInput.trim()}
+            style={{ width: "100%" }}
+          >
+            {confirmTransfer ? "⚠️ Confirm Transfer" : "👑 Transfer Admin"}
+          </button>
+          {confirmTransfer && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setConfirmTransfer(false)}
+              style={{ width: "100%", marginTop: 8 }}
+            >
+              Cancel
+            </button>
+          )}
         </section>
 
         <div className="divider" />
