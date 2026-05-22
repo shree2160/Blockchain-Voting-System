@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useLocalization } from "../context/LocalizationContext";
 
 /**
- * AdminPanel — High-Fidelity Institute Administration Dashboard Drawer
+ * AdminPanel — Professional slide-over administration drawer
  */
 export default function AdminPanel({
   isOpen,
@@ -47,25 +47,25 @@ export default function AdminPanel({
       .filter((addr) => addr.startsWith("0x") && addr.length === 42);
 
     if (cleanAddresses.length === 0) {
-      showFeedback("✗ No valid Ethereum addresses (0x...) found.", "error");
+      showFeedback("No valid Ethereum addresses found.", "error");
       return;
     }
 
     if (cleanAddresses.length === 1) {
       const res = await whitelistWallet(cleanAddresses[0]);
       if (res.success) {
-        showFeedback(`✓ Whitelisted: ${cleanAddresses[0].slice(0, 10)}...`);
+        showFeedback(`Whitelisted: ${cleanAddresses[0].slice(0, 10)}…`);
         setWalletInput("");
       } else {
-        showFeedback(`✗ ${res.error}`, "error");
+        showFeedback(res.error, "error");
       }
     } else {
       const res = await batchWhitelistWallets(cleanAddresses);
       if (res.success) {
-        showFeedback(`✓ Batch whitelisted ${cleanAddresses.length} wallets!`);
+        showFeedback(`Batch whitelisted ${cleanAddresses.length} wallets`);
         setWalletInput("");
       } else {
-        showFeedback(`✗ ${res.error}`, "error");
+        showFeedback(res.error, "error");
       }
     }
   };
@@ -74,33 +74,33 @@ export default function AdminPanel({
     if (!candName.trim()) return;
     const res = await addCandidate(candName.trim(), candImage.trim() || "", candPitch.trim());
     if (res.success) {
-      showFeedback(`✓ Added candidate: ${candName}`);
+      showFeedback(`Added: ${candName}`);
       setCandName(""); setCandPitch(""); setCandImage("");
     } else {
-      showFeedback(`✗ ${res.error}`, "error");
+      showFeedback(res.error, "error");
     }
   };
 
   const handleRemoveCandidate = async (cid) => {
     const res = await removeCandidate(cid);
     if (res.success) {
-      showFeedback(`✓ Candidate index #${cid} successfully deactivated.`);
+      showFeedback(`Candidate #${cid} deactivated`);
     } else {
-      showFeedback(`✗ ${res.error}`, "error");
+      showFeedback(res.error, "error");
     }
   };
 
   const handleUpdateDeadline = async () => {
     const mins = parseFloat(deadlineMinutes);
     if (isNaN(mins) || mins <= 0) {
-      showFeedback("✗ Please enter a valid positive duration in minutes.", "error");
+      showFeedback("Enter a valid duration.", "error");
       return;
     }
     const res = await updateElectionDeadline(mins);
     if (res.success) {
-      showFeedback(`✓ Countdown deadline shifted!`);
+      showFeedback("Deadline updated");
     } else {
-      showFeedback(`✗ ${res.error}`, "error");
+      showFeedback(res.error, "error");
     }
   };
 
@@ -108,9 +108,9 @@ export default function AdminPanel({
     // 0.5 mins = 30 seconds (Accounts for 15s Sepolia block time)
     const res = await updateElectionDeadline(0.5);
     if (res.success) {
-      showFeedback(`✓ Election ending in ~30 seconds...`);
+      showFeedback("Election ending in ~30s…");
     } else {
-      showFeedback(`✗ ${res.error}`, "error");
+      showFeedback(res.error, "error");
     }
   };
 
@@ -121,16 +121,16 @@ export default function AdminPanel({
     }
     const mins = parseInt(newElectionMinutes, 10);
     if (isNaN(mins) || mins <= 0) {
-      showFeedback("✗ Please enter a valid duration for the new election.", "error");
+      showFeedback("Enter a valid duration.", "error");
       setConfirmReset(false);
       return;
     }
     const res = await resetElection(mins);
     if (res.success) {
-      showFeedback(`🚀 New election Cohort #${electionId + 2} started!`);
+      showFeedback(`Election #${electionId + 2} launched`);
       setConfirmReset(false);
     } else {
-      showFeedback(`✗ ${res.error}`, "error");
+      showFeedback(res.error, "error");
       setConfirmReset(false);
     }
   };
@@ -139,10 +139,10 @@ export default function AdminPanel({
     if (!confirmFinalize) { setConfirmFinalize(true); return; }
     const res = await finalizeElection();
     if (res.success) {
-      showFeedback("🔒 Election finalized!");
+      showFeedback("Election finalized");
       setConfirmFinalize(false);
     } else {
-      showFeedback(`✗ ${res.error}`, "error");
+      showFeedback(res.error, "error");
       setConfirmFinalize(false);
     }
   };
@@ -152,16 +152,20 @@ export default function AdminPanel({
     if (!confirmTransfer) { setConfirmTransfer(true); return; }
     const res = await transferAdmin(newAdminInput.trim());
     if (res.success) {
-      showFeedback("👑 Admin rights successfully transferred!");
+      showFeedback("Admin rights transferred");
       setNewAdminInput("");
       setConfirmTransfer(false);
     } else {
-      showFeedback(`✗ ${res.error}`, "error");
+      showFeedback(res.error, "error");
       setConfirmTransfer(false);
     }
   };
 
   if (!isOpen) return null;
+
+  const SectionLabel = ({ children }) => (
+    <div style={styles.sectionLabel}>{children}</div>
+  );
 
   return (
     <>
@@ -170,82 +174,73 @@ export default function AdminPanel({
 
       {/* Drawer */}
       <div style={styles.drawer} className="anim-fade-in">
+        {/* Header */}
         <div style={styles.drawerHeader}>
           <div>
-            <span className="badge badge-orange" style={{ fontSize: "0.75rem", marginBottom: 4, display: "inline-block" }}>
-              🏛️ COHORT ELECTION #{electionId + 1}
+            <span className="badge badge-orange" style={{ marginBottom: 4, display: "inline-block" }}>
+              ELECTION #{electionId + 1}
             </span>
             <h2 style={styles.drawerTitle}>
-              {t("adminPanel") || "Institute Dashboard"}
+              Admin Dashboard
             </h2>
           </div>
-          <button className="btn btn-secondary" onClick={onClose} style={{ padding: "6px 14px" }}>
+          <button className="btn btn-secondary" onClick={onClose} style={{ padding: "6px 12px", fontSize: "0.78rem" }}>
             {t("close")}
           </button>
         </div>
 
-        {/* Feedback toast */}
+        {/* Feedback */}
         {feedback && (
-          <div className={`toast ${feedback.type}`} style={{ marginBottom: 16 }}>
+          <div className={`toast ${feedback.type}`} style={{ marginBottom: 12 }}>
             {feedback.msg}
           </div>
         )}
 
         <div className="divider" />
 
-        {/* ── Whitelist voter ── */}
+        {/* ── Whitelist ── */}
         <section style={styles.section}>
-          <label style={styles.label}>{t("whitelistAddress")}</label>
+          <SectionLabel>Voter Whitelisting</SectionLabel>
           <textarea
             className="input"
-            placeholder="0x...&#10;For multiple: separate with commas, spaces or newlines."
+            placeholder={"0x…\nSeparate multiple with commas or newlines"}
             value={walletInput}
             onChange={(e) => setWalletInput(e.target.value)}
-            rows={3}
-            style={{
-              resize: "vertical",
-              minHeight: "80px",
-              lineHeight: "1.4",
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: "0.82rem"
-            }}
+            rows={2}
+            style={{ resize: "vertical", minHeight: 60, lineHeight: 1.4 }}
           />
           <button
             className="btn btn-primary"
             onClick={handleWhitelist}
             disabled={txPending || !walletInput.trim()}
-            style={{ marginTop: 8 }}
+            style={{ marginTop: 8, width: "100%" }}
           >
-            {txPending ? <><span className="spinner" /> Sending...</> : `🔑 ${t("whitelistBtn")}`}
+            {txPending ? <><span className="spinner" /> Sending…</> : "Whitelist Wallet(s)"}
           </button>
         </section>
 
         <div className="divider" />
 
-        {/* ── Candidate Management ── */}
+        {/* ── Candidates ── */}
         <section style={styles.section}>
-          <label style={styles.label}>Manage Candidates</label>
-          
-          {/* Active List */}
-          <div style={styles.candidateGrid}>
+          <SectionLabel>Candidates</SectionLabel>
+
+          {/* Active list */}
+          <div style={styles.candidateList}>
             {candidates && candidates.length > 0 ? (
               candidates.map((c) => (
                 <div key={c.id} style={{
-                  ...styles.candidateCard,
-                  opacity: c.isActive ? 1 : 0.45
+                  ...styles.candidateRow,
+                  opacity: c.isActive ? 1 : 0.4,
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {c.imageUri ? (
-                      <img src={c.imageUri} alt={c.name} style={styles.candThumb} />
-                    ) : (
-                      <div style={styles.candThumbPlaceholder}>🗳️</div>
-                    )}
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: "0.88rem", color: "#f5f5f5" }}>
-                        {c.name} {!c.isActive && "(Removed)"}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                    <div style={styles.candDot}>{c.name[0]?.toUpperCase()}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 500, color: "var(--text-1)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {c.name} {!c.isActive && <span style={{ color: "var(--text-3)", fontSize: "0.72rem" }}>(removed)</span>}
                       </div>
-                      <div style={{ fontSize: "0.78rem", color: "#8a8a8a" }}>
-                        Votes: {c.voteCount}
+                      <div style={{ fontSize: "0.72rem", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+                        {c.voteCount} votes
                       </div>
                     </div>
                   </div>
@@ -254,61 +249,55 @@ export default function AdminPanel({
                       className="btn btn-danger"
                       onClick={() => handleRemoveCandidate(c.id)}
                       disabled={txPending}
-                      style={{ padding: "4px 8px", fontSize: "0.75rem" }}
-                      title="Remove Candidate"
+                      style={{ padding: "4px 10px", fontSize: "0.72rem" }}
                     >
-                      🗑️ Remove
+                      Remove
                     </button>
                   )}
                 </div>
               ))
             ) : (
-              <p style={{ color: "#777", fontSize: "0.82rem", margin: "4px 0" }}>No candidates registered for this cohort yet.</p>
+              <p style={{ color: "var(--text-3)", fontSize: "0.82rem" }}>No candidates yet.</p>
             )}
           </div>
 
-          {/* Add candidate input form */}
-          <div style={{ marginTop: 12 }}>
-            <label style={{ fontSize: "0.75rem", color: "#8a8a8a", display: "block", marginBottom: 6 }}>
-              Add New Candidate
-            </label>
+          {/* Add candidate form */}
+          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+            <span style={styles.subLabel}>Add New</span>
             <input
               className="input"
               placeholder={t("candidateName")}
               value={candName}
               onChange={(e) => setCandName(e.target.value)}
-              style={{ marginBottom: 8, fontSize: "0.82rem", padding: "8px 10px" }}
             />
             <input
               className="input"
               placeholder={t("candidatePitch")}
               value={candPitch}
               onChange={(e) => setCandPitch(e.target.value)}
-              style={{ marginBottom: 8, fontSize: "0.82rem", padding: "8px 10px" }}
             />
             <input
               className="input"
-              placeholder="Image URI (optional, IPFS/HTTPS)"
+              placeholder="Image URI (optional)"
               value={candImage}
               onChange={(e) => setCandImage(e.target.value)}
-              style={{ fontSize: "0.82rem", padding: "8px 10px" }}
             />
             <button
               className="btn btn-primary"
               onClick={handleAddCandidate}
               disabled={txPending || !candName.trim()}
-              style={{ marginTop: 10, width: "100%" }}
+              style={{ width: "100%", marginTop: 4 }}
             >
-              {txPending ? <><span className="spinner" /> Adding...</> : `➕ Add Candidate`}
+              {txPending ? <><span className="spinner" /> Adding…</> : "Add Candidate"}
             </button>
           </div>
         </section>
 
         <div className="divider" />
 
-        {/* ── Extend/Shift Deadline ── */}
+        {/* ── Election Timer ── */}
         <section style={styles.section}>
-          <label style={styles.label}>Extend Countdown Timer</label>
+          <SectionLabel>Election Timer</SectionLabel>
           <div style={{ display: "flex", gap: 8 }}>
             <input
               type="number"
@@ -316,97 +305,60 @@ export default function AdminPanel({
               value={deadlineMinutes}
               onChange={(e) => setDeadlineMinutes(e.target.value)}
               placeholder="Minutes"
-              style={{ flex: 1, fontSize: "0.85rem", padding: "6px 10px" }}
+              style={{ flex: 1 }}
             />
             <button
               className="btn btn-primary"
               onClick={handleUpdateDeadline}
               disabled={txPending || !deadlineMinutes}
-              style={{ fontSize: "0.82rem", whiteSpace: "nowrap" }}
+              style={{ whiteSpace: "nowrap" }}
             >
-              ⏳ Shift Timer
+              Extend
             </button>
           </div>
           <button
             className="btn btn-secondary"
             onClick={handleEndNow}
             disabled={txPending}
-            style={{ fontSize: "0.82rem", width: "100%", marginTop: 8 }}
+            style={{ width: "100%", marginTop: 8 }}
           >
-            ⏹️ End Election Now (30s)
+            End Election Now (30s)
           </button>
         </section>
 
         <div className="divider" />
 
-        {/* ── Reset & Launch Next Election ── */}
+        {/* ── New Election ── */}
         <section style={styles.section}>
-          <label style={styles.label}>Launch New Cohort Election</label>
-          <p style={{ color: "#8a8a8a", fontSize: "0.78rem", marginBottom: 8 }}>
-            Resets the active candidates list and increments the election cohort. Securely archives former choices.
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <input
-              type="number"
-              className="input"
-              value={newElectionMinutes}
-              onChange={(e) => setNewElectionMinutes(e.target.value)}
-              placeholder="Duration in Minutes"
-              style={{ fontSize: "0.85rem", padding: "8px 10px" }}
-            />
-            {confirmReset && (
-              <p style={{ color: "#ff6b00", fontSize: "0.78rem", margin: "4px 0" }}>
-                ⚠️ WARNING: This will immediately archive the current voting logs and reset all candidate entries! Proceed?
-              </p>
-            )}
-            <button
-              className="btn btn-danger"
-              onClick={handleResetElection}
-              disabled={txPending || !newElectionMinutes}
-              style={{ width: "100%" }}
-            >
-              {confirmReset ? "🚀 Confirm Launch!" : "🚀 Launch Next Election"}
-            </button>
-            {confirmReset && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => setConfirmReset(false)}
-                style={{ width: "100%" }}
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-        </section>
-
-        <div className="divider" />
-
-        {/* ── Transfer Admin Rights ── */}
-        <section style={styles.section}>
-          <label style={styles.label}>Transfer Admin Rights</label>
-          <p style={{ color: "#8a8a8a", fontSize: "0.78rem", marginBottom: 8 }}>
-            Permanently transfer all admin privileges to another wallet address.
+          <SectionLabel>Launch New Election</SectionLabel>
+          <p style={{ color: "var(--text-3)", fontSize: "0.75rem", marginBottom: 8 }}>
+            Archives current data and starts a fresh cohort.
           </p>
           <input
+            type="number"
             className="input"
-            placeholder="New Admin Address (0x...)"
-            value={newAdminInput}
-            onChange={(e) => setNewAdminInput(e.target.value)}
-            style={{ marginBottom: 8, fontSize: "0.82rem", padding: "8px 10px" }}
+            value={newElectionMinutes}
+            onChange={(e) => setNewElectionMinutes(e.target.value)}
+            placeholder="Duration (minutes)"
           />
+          {confirmReset && (
+            <p style={{ color: "var(--amber)", fontSize: "0.75rem", margin: "8px 0 0" }}>
+              ⚠ This will reset all candidates and votes. Proceed?
+            </p>
+          )}
           <button
             className="btn btn-danger"
-            onClick={handleTransferAdmin}
-            disabled={txPending || !newAdminInput.trim()}
-            style={{ width: "100%" }}
+            onClick={handleResetElection}
+            disabled={txPending || !newElectionMinutes}
+            style={{ width: "100%", marginTop: 8 }}
           >
-            {confirmTransfer ? "⚠️ Confirm Transfer" : "👑 Transfer Admin"}
+            {confirmReset ? "Confirm Launch" : "Launch Next Election"}
           </button>
-          {confirmTransfer && (
+          {confirmReset && (
             <button
               className="btn btn-secondary"
-              onClick={() => setConfirmTransfer(false)}
-              style={{ width: "100%", marginTop: 8 }}
+              onClick={() => setConfirmReset(false)}
+              style={{ width: "100%", marginTop: 6 }}
             >
               Cancel
             </button>
@@ -415,36 +367,71 @@ export default function AdminPanel({
 
         <div className="divider" />
 
-        {/* ── Finalize election ── */}
+        {/* ── Transfer Admin ── */}
         <section style={styles.section}>
-          <label style={styles.label}>{t("finalizeElection")}</label>
+          <SectionLabel>Transfer Admin</SectionLabel>
+          <input
+            className="input"
+            placeholder="New Admin Address (0x…)"
+            value={newAdminInput}
+            onChange={(e) => setNewAdminInput(e.target.value)}
+          />
+          {confirmTransfer && (
+            <p style={{ color: "var(--amber)", fontSize: "0.75rem", margin: "8px 0 0" }}>
+              ⚠ This is irreversible. Confirm?
+            </p>
+          )}
+          <button
+            className="btn btn-danger"
+            onClick={handleTransferAdmin}
+            disabled={txPending || !newAdminInput.trim()}
+            style={{ width: "100%", marginTop: 8 }}
+          >
+            {confirmTransfer ? "Confirm Transfer" : "Transfer Admin"}
+          </button>
+          {confirmTransfer && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setConfirmTransfer(false)}
+              style={{ width: "100%", marginTop: 6 }}
+            >
+              Cancel
+            </button>
+          )}
+        </section>
+
+        <div className="divider" />
+
+        {/* ── Finalize ── */}
+        <section style={styles.section}>
+          <SectionLabel>{t("finalizeElection")}</SectionLabel>
           {!isFinalized ? (
             <>
               {confirmFinalize && (
-                <p style={{ color: "#ff6b00", fontSize: "0.85rem", marginBottom: 10 }}>
-                  ⚠️ {t("confirmFinalize")}
+                <p style={{ color: "var(--amber)", fontSize: "0.78rem", marginBottom: 8 }}>
+                  ⚠ {t("confirmFinalize")}
                 </p>
               )}
               <button
                 className="btn btn-danger"
                 onClick={handleFinalize}
                 disabled={txPending}
-                style={{ marginTop: 6 }}
+                style={{ width: "100%" }}
               >
-                {confirmFinalize ? `🔒 ${t("confirm")}` : `🔒 ${t("finalizeElection")}`}
+                {confirmFinalize ? "Confirm Finalize" : t("finalizeElection")}
               </button>
               {confirmFinalize && (
                 <button
                   className="btn btn-secondary"
                   onClick={() => setConfirmFinalize(false)}
-                  style={{ marginTop: 8 }}
+                  style={{ width: "100%", marginTop: 6 }}
                 >
                   {t("cancel")}
                 </button>
               )}
             </>
           ) : (
-            <span className="badge badge-red">Election Finalized</span>
+            <span className="badge badge-green">Finalized</span>
           )}
         </section>
       </div>
@@ -456,8 +443,8 @@ const styles = {
   backdrop: {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.75)",
-    backdropFilter: "blur(5px)",
+    background: "rgba(0,0,0,0.6)",
+    backdropFilter: "blur(4px)",
     zIndex: 200,
   },
   drawer: {
@@ -465,74 +452,73 @@ const styles = {
     top: 0,
     right: 0,
     height: "100vh",
-    width: "min(460px, 100vw)",
-    background: "#0d0d0e",
-    borderLeft: "1px solid #1a1a1c",
+    width: "min(420px, 100vw)",
+    background: "var(--bg)",
+    borderLeft: "1px solid var(--border)",
     zIndex: 201,
     overflowY: "auto",
     padding: 24,
-    boxShadow: "-12px 0 64px rgba(0,0,0,0.9)",
   },
   drawerHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   drawerTitle: {
-    fontSize: "1.25rem",
-    fontWeight: 800,
-    color: "#f5f5f7",
+    fontSize: "1.1rem",
+    fontWeight: 700,
+    color: "var(--text-1)",
     margin: 0,
   },
   section: {
     display: "flex",
     flexDirection: "column",
     gap: 4,
-    marginBottom: 8,
   },
-  label: {
-    fontSize: "0.8rem",
-    fontWeight: 750,
-    color: "#7e7e82",
+  sectionLabel: {
+    fontSize: "0.7rem",
+    fontWeight: 700,
+    color: "var(--text-3)",
     textTransform: "uppercase",
-    letterSpacing: "1px",
+    letterSpacing: "1.2px",
     marginBottom: 8,
-    fontFamily: "'JetBrains Mono', monospace",
+    fontFamily: "var(--font-mono)",
   },
-  candidateGrid: {
+  subLabel: {
+    fontSize: "0.7rem",
+    color: "var(--text-3)",
+    fontFamily: "var(--font-mono)",
+    letterSpacing: "0.5px",
+  },
+  candidateList: {
     display: "flex",
     flexDirection: "column",
-    gap: 8,
-    maxHeight: "220px",
+    gap: 4,
+    maxHeight: 200,
     overflowY: "auto",
     paddingRight: 4,
-    marginBottom: 8,
   },
-  candidateCard: {
+  candidateRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    background: "#161618",
-    border: "1px solid #232326",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
     borderRadius: 8,
     padding: "8px 12px",
   },
-  candThumb: {
-    width: 32,
-    height: 32,
-    borderRadius: "50%",
-    objectFit: "cover",
-    border: "1px solid #ff6b00",
-  },
-  candThumbPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: "50%",
-    background: "#2a2a2f",
+  candDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    background: "var(--surface-3)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: "0.85rem",
-  }
+    fontSize: "0.72rem",
+    fontWeight: 700,
+    color: "var(--text-2)",
+    flexShrink: 0,
+  },
 };

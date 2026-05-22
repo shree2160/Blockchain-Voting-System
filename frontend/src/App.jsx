@@ -29,56 +29,53 @@ function ToastContainer({ toasts }) {
   );
 }
 
-// ── Main app inner (needs localization context) ───────────────────────────
+// ── Main app inner ───────────────────────────────────────────────────────
 function AppInner() {
   const { t } = useLocalization();
   const voting = useVoting();
 
-  const [pendingVote,    setPendingVote]    = useState(null); // candidate to confirm
-  const [adminOpen,      setAdminOpen]      = useState(false);
-  const [toasts,         setToasts]         = useState([]);
+  const [pendingVote,      setPendingVote]      = useState(null);
+  const [adminOpen,        setAdminOpen]        = useState(false);
+  const [toasts,           setToasts]           = useState([]);
   const [studentId,        setStudentId]        = useState("");
   const [voucherSignature, setVoucherSignature] = useState("");
 
   const handleGetVoucher = async () => {
     if (!studentId.trim()) return;
-    addToast("🔄 Authenticating student credentials...", "info");
+    addToast("Authenticating credentials…", "info");
     const sig = await voting.generateMockSignature(voting.account);
     if (sig) {
       setVoucherSignature(sig);
-      addToast("🔑 Signature voucher received off-chain!", "success");
+      addToast("Signature voucher received", "success");
     } else {
-      addToast("✗ Off-chain registration signature failed.", "error");
+      addToast("Signature generation failed", "error");
     }
   };
 
   const handleSelfRegister = async () => {
     if (!voucherSignature) return;
-    addToast("⏳ Validating voucher on blockchain...", "info");
+    addToast("Validating on blockchain…", "info");
     const res = await voting.registerVoter(voucherSignature);
     if (res.success) {
-      addToast("🎉 Wallet successfully registered and whitelisted on-chain!", "success");
+      addToast("Wallet registered and whitelisted!", "success");
       setVoucherSignature("");
       setStudentId("");
     } else {
-      addToast(`✗ Registration rejected: ${res.error}`, "error");
+      addToast(`Registration failed: ${res.error}`, "error");
     }
   };
 
-  // ── Toast helper ──────────────────────────────────────────────────────
   const addToast = (msg, type = "info") => {
     const id = Date.now();
     setToasts((t) => [...t, { id, msg, type }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
   };
 
-  // ── Kick off vote confirm flow ────────────────────────────────────────
   const handleVoteClick = (candidateId) => {
     const cand = voting.candidates.find((c) => c.id === candidateId);
     setPendingVote(cand);
   };
 
-  // ── Execute confirmed vote ────────────────────────────────────────────
   const handleConfirmVote = async () => {
     if (!pendingVote) return;
     const wasOverride = voting.voterRecord.hasVoted;
@@ -91,37 +88,12 @@ function AppInner() {
     }
   };
 
-  // ── Derived state ─────────────────────────────────────────────────────
   const electionActive = voting.timeLeft > 0 && !voting.isFinalized;
-  const canVote        = electionActive && voting.isWhitelisted;
-
-  // ── Hero stats ────────────────────────────────────────────────────────
-  const StatPill = ({ label, value, accent }) => (
-    <div style={{
-      background: "#0f0f0f",
-      border: "1px solid #1e1e1e",
-      borderRadius: 16,
-      padding: "16px 24px",
-      textAlign: "center",
-      flex: 1,
-      minWidth: 120,
-    }}>
-      <div style={{
-        fontSize: "2rem",
-        fontWeight: 900,
-        fontFamily: "'JetBrains Mono', monospace",
-        color: accent || "#ff6b00",
-        lineHeight: 1,
-      }}>{value}</div>
-      <div style={{ fontSize: "0.75rem", color: "#5a5a5a", marginTop: 6, textTransform: "uppercase", letterSpacing: "0.8px" }}>
-        {label}
-      </div>
-    </div>
-  );
+  const canVote = electionActive && voting.isWhitelisted;
+  const activeCandidates = voting.candidates.filter(c => c.isActive);
 
   return (
     <div style={{ position: "relative", zIndex: 1, minHeight: "100vh" }}>
-      {/* Header */}
       <Header
         account={voting.account}
         chainId={voting.chainId}
@@ -131,7 +103,6 @@ function AppInner() {
         txPending={voting.txPending}
       />
 
-      {/* Admin panel */}
       <AdminPanel
         isOpen={adminOpen}
         onClose={() => setAdminOpen(false)}
@@ -149,7 +120,6 @@ function AppInner() {
         electionId={voting.electionId}
       />
 
-      {/* Vote confirm overlay */}
       <VoteOverlay
         candidate={pendingVote}
         isOverride={voting.voterRecord.hasVoted}
@@ -158,16 +128,22 @@ function AppInner() {
         txPending={voting.txPending}
       />
 
-      {/* Toast notifications */}
       <ToastContainer toasts={toasts} />
 
       <main style={styles.main}>
-        {/* ── Hero section ─────────────────────────────────────── */}
+        {/* ── Hero ──────────────────────────────────────────────── */}
         <section style={styles.hero} className="anim-fade-in">
-          <div style={styles.heroTag}>
-            <span className="dot-pulse" style={{ color: electionActive ? "#00e676" : "#ff1744" }} />
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "0.8rem", color: electionActive ? "#00e676" : "#ff1744" }}>
-              {electionActive ? t("electionActive") : t("electionEnded")}
+          {/* Status pill */}
+          <div style={styles.statusPill}>
+            <span className="dot-pulse" style={{ color: electionActive ? "var(--green)" : "var(--red)" }} />
+            <span style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.72rem",
+              color: electionActive ? "var(--green)" : "var(--red)",
+              fontWeight: 600,
+              letterSpacing: "0.5px",
+            }}>
+              {electionActive ? t("electionActive").toUpperCase() : t("electionEnded").toUpperCase()}
             </span>
           </div>
 
@@ -176,104 +152,103 @@ function AppInner() {
           </h2>
           <p style={styles.heroSub}>{t("appTagline")}</p>
 
-          {/* Stat pills */}
+          {/* Stats */}
           <div style={styles.statsRow}>
-            <StatPill label={t("totalVotes")} value={voting.totalVotes} />
-            <StatPill label={t("candidates")} value={voting.candidates.filter(c => c.isActive).length} accent="#9a9a9a" />
-            <StatPill
+            <Stat label={t("totalVotes")} value={voting.totalVotes} />
+            <Stat label={t("candidates")} value={activeCandidates.length} />
+            <Stat
               label={electionActive ? t("electionEndsIn") : t("electionEnded")}
               value={electionActive ? formatTime(voting.timeLeft) : "—"}
-              accent={electionActive ? "#ff6b00" : "#5a5a5a"}
+              mono
             />
           </div>
 
-          {/* Privacy / anti-coercion notices */}
-          <div style={styles.noticesRow}>
+          {/* Notices */}
+          <div style={styles.noticeRow}>
             <div style={styles.notice}>
-              <span>🔒</span>
-              <span style={{ fontSize: "0.8rem", color: "#9a9a9a" }}>{t("privacyNotice")}</span>
+              <span style={{ fontSize: "0.85rem" }}>🔒</span>
+              <span>{t("privacyNotice")}</span>
             </div>
             {electionActive && voting.account && (
-              <div style={{ ...styles.notice, borderColor: "rgba(255,107,0,0.3)", background: "rgba(255,107,0,0.06)" }}>
-                <span>🛡️</span>
-                <span style={{ fontSize: "0.8rem", color: "#ff8c35" }}>{t("antiCoercionNotice")}</span>
+              <div style={{ ...styles.notice, background: "var(--accent-soft)", borderColor: "rgba(232,89,12,0.1)" }}>
+                <span style={{ fontSize: "0.85rem" }}>🛡️</span>
+                <span style={{ color: "var(--text-2)" }}>{t("antiCoercionNotice")}</span>
               </div>
             )}
           </div>
 
-          {/* Error banner */}
+          {/* Error */}
           {voting.error && (
             <div style={styles.errorBanner} className="anim-fade-in">
-              <span>⚠️ {voting.error}</span>
-              <button onClick={voting.clearError} style={{ background: "none", border: "none", color: "#ff1744", cursor: "pointer", fontSize: "1rem" }}>×</button>
+              <span>⚠ {voting.error}</span>
+              <button onClick={voting.clearError} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "1rem", lineHeight: 1 }}>×</button>
             </div>
           )}
 
-          {/* Not connected CTA */}
+          {/* Connect CTA */}
           {!voting.account && (
-            <button className="btn btn-primary" style={{ marginTop: 16, fontSize: "1rem", padding: "14px 36px" }} onClick={voting.connectWallet}>
-              🦊 {t("connectWallet")}
+            <button className="btn btn-primary" style={{ marginTop: 20, padding: "12px 32px" }} onClick={voting.connectWallet}>
+              {t("connectWallet")}
             </button>
           )}
 
-          {/* Cryptographic Voter Self-Registration (ECDSA) Portal */}
+          {/* Self Registration Portal */}
           {voting.account && !voting.isWhitelisted && (
-            <div style={styles.selfRegCard} className="anim-fade-in-up">
-              <h3 style={styles.selfRegTitle}>🎓 Student Verification Portal</h3>
-              <p style={styles.selfRegSub}>
-                To maintain 100% privacy, verify your student status off-chain. 
-                The campus registration authority will sign your anonymous wallet address to authorize your vote.
+            <div style={styles.regCard} className="anim-fade-in-up">
+              <h3 style={styles.regTitle}>Student Verification</h3>
+              <p style={styles.regSub}>
+                Verify your student status off-chain. The campus authority will sign your anonymous wallet to authorize your vote.
               </p>
-              
-              <div style={styles.selfRegForm}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", textAlign: "left" }}>
-                  <label style={styles.selfRegLabel}>ANONYMOUS WALLET</label>
-                  <input 
-                    className="input" 
-                    readOnly 
-                    value={voting.account} 
-                    style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "0.82rem", background: "rgba(255,255,255,0.03)" }}
+
+              <div style={styles.regForm}>
+                <div style={styles.fieldGroup}>
+                  <label style={styles.fieldLabel}>WALLET</label>
+                  <input
+                    className="input"
+                    readOnly
+                    value={voting.account}
+                    style={{ background: "var(--surface-3)", fontSize: "0.78rem" }}
                   />
                 </div>
-                
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", marginTop: 12, textAlign: "left" }}>
-                  <label style={styles.selfRegLabel}>STUDENT ID (Mock SSO login)</label>
-                  <input 
-                    className="input" 
-                    placeholder="Enter Student ID (e.g. S10245)" 
+
+                <div style={styles.fieldGroup}>
+                  <label style={styles.fieldLabel}>STUDENT ID</label>
+                  <input
+                    className="input"
+                    placeholder="e.g. S10245"
                     value={studentId}
                     onChange={(e) => setStudentId(e.target.value)}
                   />
                 </div>
 
                 {!voucherSignature ? (
-                  <button 
-                    className="btn btn-secondary" 
+                  <button
+                    className="btn btn-secondary"
                     disabled={!studentId.trim() || voting.txPending}
                     onClick={handleGetVoucher}
-                    style={{ marginTop: 16, width: "100%", padding: "10px 0" }}
+                    style={{ width: "100%", marginTop: 8 }}
                   >
-                    🔒 1. Get Campus Signature Voucher
+                    1. Get Campus Signature
                   </button>
                 ) : (
-                  <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
-                    <div style={{ background: "rgba(0, 230, 118, 0.08)", border: "1px solid #00e676", borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 4, textAlign: "left" }}>
-                      <span style={{ fontSize: "0.75rem", fontFamily: "'JetBrains Mono', monospace", color: "#00e676", fontWeight: "bold" }}>✓ SIGNATURE VOUCHER RECEIVED</span>
-                      <span style={{ fontSize: "0.7rem", fontFamily: "'JetBrains Mono', monospace", color: "#a5d6a7", overflowWrap: "anywhere" }}>
-                        {voucherSignature.slice(0, 48)}...
+                  <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                    <div style={styles.voucherBox}>
+                      <span style={{ fontSize: "0.7rem", fontFamily: "var(--font-mono)", color: "var(--green)", fontWeight: 600 }}>✓ VOUCHER RECEIVED</span>
+                      <span style={{ fontSize: "0.65rem", fontFamily: "var(--font-mono)", color: "var(--text-3)", overflowWrap: "anywhere" }}>
+                        {voucherSignature.slice(0, 48)}…
                       </span>
                     </div>
-                    <button 
-                      className="btn btn-primary" 
+                    <button
+                      className="btn btn-primary"
                       disabled={voting.txPending}
                       onClick={handleSelfRegister}
-                      style={{ width: "100%", padding: "12px 0" }}
+                      style={{ width: "100%" }}
                     >
-                      🚀 2. Register Wallet on Blockchain
+                      2. Register on Blockchain
                     </button>
                     <button
                       className="btn btn-secondary"
-                      style={{ fontSize: "0.75rem", padding: "4px", marginTop: 4, width: "60px", alignSelf: "center" }}
+                      style={{ fontSize: "0.72rem", padding: "4px 8px", width: "fit-content", alignSelf: "center" }}
                       onClick={() => setVoucherSignature("")}
                     >
                       Reset
@@ -284,16 +259,16 @@ function AppInner() {
             </div>
           )}
 
-          {/* My vote status */}
+          {/* Vote status chip */}
           {voting.account && voting.isWhitelisted && (
-            <div style={styles.myVoteChip}>
+            <div style={styles.voteChip}>
               {voting.voterRecord.hasVoted
-                ? <>✓ {t("youVotedFor")} <strong style={{ color: "#ff6b00" }}>{voting.candidates[voting.voterRecord.candidateId]?.name}</strong></>
+                ? <>✓ {t("youVotedFor")} <strong style={{ color: "var(--accent)" }}>{voting.candidates[voting.voterRecord.candidateId]?.name}</strong></>
                 : <>{t("noVoteYet")}</>}
             </div>
           )}
 
-          {/* Winner announcement celebration banner */}
+          {/* Winner */}
           {voting.winner && (
             <div className="winner-card anim-fade-in-up">
               <div className="winner-crown">🏆</div>
@@ -309,31 +284,36 @@ function AppInner() {
           {/* Admin button */}
           {voting.isAdmin && (
             <button className="btn btn-secondary" style={{ marginTop: 12 }} onClick={() => setAdminOpen(true)}>
-              ⚡ {t("adminPanel")}
+              {t("adminPanel")}
             </button>
           )}
         </section>
 
-        {/* ── Candidates grid ─────────────────────────────────── */}
+        {/* ── Candidates grid ──────────────────────────────────── */}
         <section style={styles.section}>
-          <h3 style={styles.sectionTitle}>{t("liveResults")}</h3>
+          <h3 style={styles.sectionTitle}>
+            <span>{t("liveResults")}</span>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-3)", fontFamily: "var(--font-mono)", fontWeight: 400 }}>
+              {activeCandidates.length} active
+            </span>
+          </h3>
 
           {voting.loading ? (
-            <div style={styles.skeletonGrid}>
-              {[1,2,3].map((i) => (
-                <div key={i} className="skeleton" style={{ height: 340, borderRadius: 20 }} />
+            <div style={styles.grid}>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="skeleton" style={{ height: 300, borderRadius: 16 }} />
               ))}
             </div>
-          ) : voting.candidates.filter(c => c.isActive).length === 0 ? (
-            <div style={styles.emptyState}>
-              <p style={{ color: "#5a5a5a", fontFamily: "'JetBrains Mono', monospace" }}>
+          ) : activeCandidates.length === 0 ? (
+            <div style={styles.empty}>
+              <p style={{ color: "var(--text-3)", fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
                 No active candidates registered.
               </p>
             </div>
           ) : (
-            <div style={styles.candidatesGrid}>
-              {voting.candidates.filter(c => c.isActive).map((c, i) => (
-                <div key={c.id} className="anim-fade-in-up" style={{ animationDelay: `${i * 0.08}s` }}>
+            <div style={styles.grid}>
+              {activeCandidates.map((c, i) => (
+                <div key={c.id} className="anim-fade-in-up" style={{ animationDelay: `${i * 0.06}s` }}>
                   <CandidateCard
                     candidate={c}
                     totalVotes={voting.totalVotes}
@@ -350,9 +330,11 @@ function AppInner() {
         </section>
 
         {/* ── How it works ─────────────────────────────────────── */}
-        <section style={{ ...styles.section, maxWidth: 680, margin: "0 auto 64px" }}>
-          <h3 style={styles.sectionTitle}>{t("howItWorks")}</h3>
-          <div style={styles.stepsGrid}>
+        <section style={{ ...styles.section, maxWidth: 640, margin: "0 auto 64px" }}>
+          <h3 style={styles.sectionTitle}>
+            <span>{t("howItWorks")}</span>
+          </h3>
+          <div style={styles.stepsGrid} className="steps-grid">
             {[
               { num: "01", key: "step1", icon: "🔐" },
               { num: "02", key: "step2", icon: "✅" },
@@ -369,14 +351,39 @@ function AppInner() {
 
         {/* Footer */}
         <footer style={styles.footer}>
-          <span className="text-mono" style={{ color: "#5a5a5a", fontSize: "0.78rem" }}>
-            CryptoVote Campus V2.0 · Built on Ethereum ·{" "}
+          <span className="text-mono" style={{ color: "var(--text-3)", fontSize: "0.72rem" }}>
+            CryptoVote Campus V2.0 · Ethereum ·{" "}
             {voting.contractAddress
-              ? `Contract: ${voting.contractAddress.slice(0, 10)}...`
-              : "No contract connected"}
+              ? `${voting.contractAddress.slice(0, 10)}…`
+              : "No contract"}
           </span>
         </footer>
       </main>
+    </div>
+  );
+}
+
+// ── Stat component ──────────────────────────────────────────────────────
+function Stat({ label, value, mono }) {
+  return (
+    <div style={styles.stat}>
+      <div style={{
+        fontSize: "1.6rem",
+        fontWeight: 800,
+        fontFamily: mono ? "var(--font-mono)" : "var(--font)",
+        color: "var(--text-1)",
+        lineHeight: 1,
+      }}>{value}</div>
+      <div style={{
+        fontSize: "0.68rem",
+        color: "var(--text-3)",
+        marginTop: 4,
+        textTransform: "uppercase",
+        letterSpacing: "0.8px",
+        fontFamily: "var(--font-mono)",
+      }}>
+        {label}
+      </div>
     </div>
   );
 }
@@ -390,191 +397,211 @@ export default function App() {
   );
 }
 
-// ── Inline styles ────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────
 const styles = {
   main: {
-    maxWidth: 1280,
+    maxWidth: 1120,
     margin: "0 auto",
-    padding: "40px 24px",
+    padding: "48px 24px",
   },
   hero: {
     textAlign: "center",
-    marginBottom: 56,
+    marginBottom: 64,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
   },
-  heroTag: {
+  statusPill: {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    background: "#0f0f0f",
-    border: "1px solid #1e1e1e",
-    borderRadius: 999,
-    padding: "5px 14px",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+    padding: "4px 12px",
   },
   heroTitle: {
-    fontSize: "clamp(2rem, 5vw, 3.5rem)",
-    fontWeight: 900,
+    fontSize: "clamp(2rem, 5vw, 3rem)",
+    fontWeight: 800,
     lineHeight: 1.1,
     margin: 0,
+    letterSpacing: "-0.02em",
   },
   heroSub: {
-    fontSize: "1rem",
-    color: "#9a9a9a",
-    maxWidth: 500,
+    fontSize: "0.95rem",
+    color: "var(--text-3)",
+    maxWidth: 400,
+    lineHeight: 1.5,
   },
   statsRow: {
     display: "flex",
-    gap: 12,
+    gap: 8,
     flexWrap: "wrap",
     justifyContent: "center",
     width: "100%",
-    maxWidth: 600,
+    maxWidth: 520,
+    marginTop: 8,
   },
-  noticesRow: {
+  stat: {
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    padding: "14px 20px",
+    textAlign: "center",
+    flex: 1,
+    minWidth: 110,
+  },
+  noticeRow: {
     display: "flex",
     flexDirection: "column",
-    gap: 8,
+    gap: 6,
     width: "100%",
-    maxWidth: 600,
+    maxWidth: 520,
+    marginTop: 4,
   },
   notice: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
-    padding: "10px 16px",
-    background: "rgba(255,255,255,0.02)",
-    border: "1px solid #1e1e1e",
-    borderRadius: 12,
+    gap: 8,
+    padding: "8px 14px",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    fontSize: "0.78rem",
+    color: "var(--text-3)",
   },
   errorBanner: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    background: "rgba(255,23,68,0.08)",
-    border: "1px solid rgba(255,23,68,0.35)",
-    borderRadius: 12,
-    padding: "12px 16px",
-    color: "#ff1744",
-    fontSize: "0.88rem",
+    background: "rgba(239,68,68,0.06)",
+    border: "1px solid rgba(239,68,68,0.15)",
+    borderRadius: 8,
+    padding: "10px 14px",
+    color: "var(--red)",
+    fontSize: "0.82rem",
     width: "100%",
-    maxWidth: 600,
+    maxWidth: 520,
   },
-  warnBanner: {
-    background: "rgba(255,196,0,0.08)",
-    border: "1px solid rgba(255,196,0,0.3)",
-    borderRadius: 12,
-    padding: "12px 20px",
-    color: "#ffc400",
-    fontSize: "0.88rem",
+  voteChip: {
+    background: "var(--accent-soft)",
+    border: "1px solid rgba(232,89,12,0.12)",
+    borderRadius: 8,
+    padding: "6px 16px",
+    fontSize: "0.82rem",
+    color: "var(--text-2)",
   },
-  myVoteChip: {
-    background: "rgba(255,107,0,0.08)",
-    border: "1px solid rgba(255,107,0,0.25)",
-    borderRadius: 999,
-    padding: "8px 20px",
-    fontSize: "0.88rem",
-    color: "#9a9a9a",
+  regCard: {
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 16,
+    padding: 24,
+    maxWidth: 440,
+    width: "100%",
+    marginTop: 12,
+  },
+  regTitle: {
+    fontSize: "1rem",
+    fontWeight: 600,
+    color: "var(--text-1)",
+    margin: "0 0 6px 0",
+  },
+  regSub: {
+    fontSize: "0.78rem",
+    color: "var(--text-3)",
+    lineHeight: 1.5,
+    margin: "0 0 16px 0",
+  },
+  regForm: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+  },
+  fieldGroup: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    width: "100%",
+    textAlign: "left",
+    marginBottom: 8,
+  },
+  fieldLabel: {
+    fontFamily: "var(--font-mono)",
+    fontSize: "0.62rem",
+    letterSpacing: "1.5px",
+    color: "var(--text-3)",
+    fontWeight: 600,
+  },
+  voucherBox: {
+    background: "rgba(34,197,94,0.06)",
+    border: "1px solid rgba(34,197,94,0.15)",
+    borderRadius: 8,
+    padding: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    textAlign: "left",
   },
   section: {
     marginBottom: 48,
   },
   sectionTitle: {
-    fontSize: "1.4rem",
-    fontWeight: 700,
-    color: "#f5f5f5",
-    marginBottom: 24,
+    fontSize: "1.15rem",
+    fontWeight: 600,
+    color: "var(--text-1)",
+    marginBottom: 20,
     display: "flex",
-    alignItems: "center",
+    alignItems: "baseline",
+    justifyContent: "space-between",
     gap: 10,
   },
-  candidatesGrid: {
+  grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-    gap: 24,
+    gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+    gap: 16,
   },
-  skeletonGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-    gap: 24,
-  },
-  emptyState: {
+  empty: {
     textAlign: "center",
-    padding: "64px 0",
-    background: "#0f0f0f",
-    borderRadius: 20,
-    border: "1px dashed #1e1e1e",
+    padding: "56px 0",
+    background: "var(--surface)",
+    borderRadius: 16,
+    border: "1px dashed var(--border)",
   },
   stepsGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, 1fr)",
-    gap: 16,
+    gap: 12,
   },
   stepCard: {
-    background: "#0f0f0f",
-    border: "1px solid #1e1e1e",
-    borderRadius: 16,
-    padding: "24px 16px",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    padding: "20px 14px",
     textAlign: "center",
-    transition: "border-color 0.3s",
+    transition: "border-color 0.2s",
   },
   stepNum: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: "0.75rem",
-    color: "#ff6b00",
+    fontFamily: "var(--font-mono)",
+    fontSize: "0.68rem",
+    color: "var(--accent)",
     letterSpacing: "2px",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   stepIcon: {
-    fontSize: "1.8rem",
-    marginBottom: 10,
+    fontSize: "1.4rem",
+    marginBottom: 8,
   },
   stepText: {
-    fontSize: "0.83rem",
-    color: "#9a9a9a",
-    lineHeight: 1.6,
+    fontSize: "0.78rem",
+    color: "var(--text-3)",
+    lineHeight: 1.5,
   },
   footer: {
     textAlign: "center",
-    paddingTop: 24,
-    borderTop: "1px solid #1e1e1e",
-    marginTop: 24,
-  },
-  selfRegCard: {
-    background: "linear-gradient(135deg, rgba(255,107,0,0.06) 0%, rgba(0,0,0,0) 100%)",
-    border: "1px solid rgba(255,107,0,0.2)",
-    borderRadius: 20,
-    padding: 24,
-    maxWidth: 500,
-    width: "100%",
-    marginTop: 16,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
-  },
-  selfRegTitle: {
-    fontSize: "1.15rem",
-    fontWeight: 700,
-    color: "#fff",
-    margin: "0 0 8px 0",
-  },
-  selfRegSub: {
-    fontSize: "0.82rem",
-    color: "#9a9a9a",
-    lineHeight: 1.5,
-    margin: "0 0 20px 0",
-  },
-  selfRegForm: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-  },
-  selfRegLabel: {
-    fontFamily: "'JetBrains Mono', monospace",
-    fontSize: "0.68rem",
-    letterSpacing: "1.5px",
-    color: "#ff6b00",
-    fontWeight: "bold",
+    paddingTop: 20,
+    borderTop: "1px solid var(--border)",
+    marginTop: 20,
   },
 };
