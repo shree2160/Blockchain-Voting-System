@@ -293,8 +293,8 @@ export function useVoting() {
   // ── Mock College Signing Server helper (Offline) ──────────────────────────
   const generateMockSignature = useCallback(async (voterAddr) => {
     try {
-      // Use standard development private key for Account #0 (Campus Authority key)
-      const mockAuthorityWallet = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+      // Use the Sepolia deployer private key (Campus Authority key)
+      const mockAuthorityWallet = new ethers.Wallet("0xdb6a5d970880c7e776fe55204841a81ee0ada589a831d318f56ad42424267cd7");
       
       // Hash the voter address matching solidity's keccak256(abi.encodePacked(voter))
       const messageHash = ethers.solidityPackedKeccak256(["address"], [voterAddr]);
