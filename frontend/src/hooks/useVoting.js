@@ -356,7 +356,7 @@ export function useVoting() {
       const provider = providerRef.current || new ethers.BrowserProvider(window.ethereum);
       const currentBlock = await provider.getBlock("latest");
       const currentTimestamp = currentBlock.timestamp;
-      const newDeadline = currentTimestamp + (durationInMinutes * 60);
+      const newDeadline = currentTimestamp + Math.floor(durationInMinutes * 60);
 
       const tx = await contractRef.current.updateElectionDeadline(newDeadline);
       await tx.wait();

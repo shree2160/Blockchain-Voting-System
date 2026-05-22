@@ -91,14 +91,24 @@ export default function AdminPanel({
   };
 
   const handleUpdateDeadline = async () => {
-    const mins = parseInt(deadlineMinutes, 10);
+    const mins = parseFloat(deadlineMinutes);
     if (isNaN(mins) || mins <= 0) {
       showFeedback("✗ Please enter a valid positive duration in minutes.", "error");
       return;
     }
     const res = await updateElectionDeadline(mins);
     if (res.success) {
-      showFeedback(`✓ Countdown deadline shifted by ${mins} minutes!`);
+      showFeedback(`✓ Countdown deadline shifted!`);
+    } else {
+      showFeedback(`✗ ${res.error}`, "error");
+    }
+  };
+
+  const handleEndNow = async () => {
+    // 0.05 mins = 3 seconds
+    const res = await updateElectionDeadline(0.05);
+    if (res.success) {
+      showFeedback(`✓ Election ending in 3 seconds...`);
     } else {
       showFeedback(`✗ ${res.error}`, "error");
     }
@@ -317,6 +327,14 @@ export default function AdminPanel({
               ⏳ Shift Timer
             </button>
           </div>
+          <button
+            className="btn btn-secondary"
+            onClick={handleEndNow}
+            disabled={txPending}
+            style={{ fontSize: "0.82rem", width: "100%", marginTop: 8 }}
+          >
+            ⏹️ End Election Now (3s)
+          </button>
         </section>
 
         <div className="divider" />
