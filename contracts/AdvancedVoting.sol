@@ -5,6 +5,7 @@ pragma solidity ^0.8.19;
  * @title AdvancedVoting — CryptoVote Campus V2.0
  * @author CryptoVote Team
  * @notice Implements Off-Chain Identity Privacy + Anti-Coercion Override Protocol
+ *         + Gasless Meta-Transactions via EIP-712 Typed Structured Data
  *
  * PRIVACY MODEL:
  *   • Real student identities NEVER enter the chain.
@@ -15,6 +16,12 @@ pragma solidity ^0.8.19;
  *   • A whitelisted wallet may call vote() multiple times before electionDeadline.
  *   • Each call atomically reverses the previous vote and applies the new one.
  *   • After electionDeadline the contract is frozen; no further state changes occur.
+ *
+ * GASLESS MODEL (EIP-712):
+ *   • Students sign a typed ballot off-chain (free — no ETH needed).
+ *   • A trusted Relayer submits the signature and pays gas on behalf of the student.
+ *   • The contract recovers the student's address via ecrecover and counts the vote.
+ *   • Nonces prevent replay attacks.
  */
 contract AdvancedVoting {
     // ─────────────────────────────────────────────────────────── Types ──────
@@ -47,9 +54,20 @@ contract AdvancedVoting {
 
     Candidate[] public candidates;
 
+    // ── EIP-712 Gasless Meta-Transaction State ──────────────────────────────
+    // Replay protection: each voter has a nonce that increments after every gasless vote
+    mapping(address => uint256) public metaTxNonces;
+
+    // EIP-712 Domain Separator (computed once at deploy, cached for gas savings)
+    bytes32 public DOMAIN_SEPARATOR;
+
+    // EIP-712 type hash for the Vote struct: Vote(address voter,uint256 candidateId,uint256 nonce)
+    bytes32 public constant VOTE_TYPEHASH = keccak256("Vote(address voter,uint256 candidateId,uint256 nonce)");
+
     // ─────────────────────────────────────────────────────────── Events ──────
     event WalletWhitelisted(address indexed wallet, uint256 timestamp);
     event VoteCast(address indexed voter, uint256 indexed candidateId, bool wasOverride, uint256 timestamp);
+    event GaslessVoteCast(address indexed voter, uint256 indexed candidateId, address indexed relayer, bool wasOverride, uint256 timestamp);
     event CandidateAdded(uint256 indexed id, string name);
     event ElectionFinalized(uint256 timestamp, uint256[] finalTallies);
     event CandidateRemoved(uint256 indexed id);
@@ -84,6 +102,15 @@ contract AdvancedVoting {
         admin            = msg.sender;
         electionDeadline = block.timestamp + (_durationInMinutes * 1 minutes);
         campusAuthority  = _campusAuthority;
+
+        // EIP-712 Domain Separator — unique to this contract deployment
+        DOMAIN_SEPARATOR = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+            keccak256("CryptoVote Campus"),
+            keccak256("2"),
+            block.chainid,
+            address(this)
+        ));
     }
 
     // ─────────────────────────────────────────────── Candidate Management ──────
@@ -167,26 +194,81 @@ contract AdvancedVoting {
 
     // ───────────────────────────────────────────── Core Voting Logic ──────
     /**
-     * @notice FR-02 & FR-03  Cast or override a vote.
-     *
-     *  Anti-Coercion flow:
-     *    1. Verify sender is a valid anonymous wallet.
-     *    2. If sender HAS voted before → decrement old candidate's tally (override).
-     *    3. Record new vote and increment new candidate's tally.
-     *
+     * @notice FR-02 & FR-03  Cast or override a vote (standard — voter pays gas).
      * @param _candidateId  Zero-indexed position in the candidates array.
      */
     function vote(uint256 _candidateId) external electionActive {
         require(validAnonymousWallets[msg.sender], "AV: wallet not authorized");
+        _executeVote(msg.sender, _candidateId, false);
+    }
+
+    // ── EIP-712 Gasless Meta-Transaction Voting ─────────────────────────────
+    /**
+     * @notice Gasless vote: a Relayer calls this on behalf of the voter.
+     *         The voter signs an EIP-712 typed message off-chain (free).
+     *         The Relayer submits the signature and pays the gas fee.
+     *
+     * @param _voter        The whitelisted voter's address (recovered from sig).
+     * @param _candidateId  Candidate to vote for.
+     * @param _nonce        Replay-protection nonce (must match metaTxNonces[_voter]).
+     * @param _v            ECDSA signature component v.
+     * @param _r            ECDSA signature component r.
+     * @param _s            ECDSA signature component s.
+     */
+    function castGaslessVote(
+        address _voter,
+        uint256 _candidateId,
+        uint256 _nonce,
+        uint8   _v,
+        bytes32 _r,
+        bytes32 _s
+    ) external electionActive {
+        // 1. Verify nonce matches to prevent replay
+        require(_nonce == metaTxNonces[_voter], "AV: invalid nonce");
+
+        // 2. Reconstruct the EIP-712 digest
+        bytes32 structHash = keccak256(abi.encode(
+            VOTE_TYPEHASH,
+            _voter,
+            _candidateId,
+            _nonce
+        ));
+        bytes32 digest = keccak256(abi.encodePacked(
+            "\x19\x01",
+            DOMAIN_SEPARATOR,
+            structHash
+        ));
+
+        // 3. Recover signer and verify it matches the claimed voter
+        address recoveredSigner = ecrecover(digest, _v, _r, _s);
+        require(recoveredSigner != address(0), "AV: invalid signature");
+        require(recoveredSigner == _voter, "AV: signer mismatch");
+
+        // 4. Verify the recovered signer is whitelisted
+        require(validAnonymousWallets[_voter], "AV: wallet not authorized");
+
+        // 5. Increment nonce (prevents replay of the same signature)
+        metaTxNonces[_voter]++;
+
+        // 6. Execute the vote with anti-coercion override logic
+        _executeVote(_voter, _candidateId, true);
+    }
+
+    /**
+     * @dev Internal shared vote execution logic used by both vote() and castGaslessVote().
+     * @param _voter        Address of the actual voter.
+     * @param _candidateId  Candidate index.
+     * @param _isGasless    Whether this is a meta-transaction (for event differentiation).
+     */
+    function _executeVote(address _voter, uint256 _candidateId, bool _isGasless) internal {
         require(_candidateId < candidates.length,  "AV: invalid candidateId");
         require(candidates[_candidateId].isActive, "AV: candidate is inactive");
 
         bool wasOverride = false;
 
         // ── Override path ────────────────────────────────────────────────────
-        if (voterRecords[electionId][msg.sender].hasVoted) {
-            uint256 oldChoice = voterRecords[electionId][msg.sender].candidateId;
-            // Guard: only decrement if it actually had a vote counted
+        if (voterRecords[electionId][_voter].hasVoted) {
+            uint256 oldChoice = voterRecords[electionId][_voter].candidateId;
             if (candidates[oldChoice].voteCount > 0) {
                 candidates[oldChoice].voteCount--;
             }
@@ -194,20 +276,23 @@ contract AdvancedVoting {
         }
 
         // ── Apply new vote ───────────────────────────────────────────────────
-        voterRecords[electionId][msg.sender] = VoteRecord({
+        voterRecords[electionId][_voter] = VoteRecord({
             candidateId: _candidateId,
             hasVoted:    true,
             votedAt:     block.timestamp
         });
         candidates[_candidateId].voteCount++;
 
-        emit VoteCast(msg.sender, _candidateId, wasOverride, block.timestamp);
+        if (_isGasless) {
+            emit GaslessVoteCast(_voter, _candidateId, msg.sender, wasOverride, block.timestamp);
+        } else {
+            emit VoteCast(_voter, _candidateId, wasOverride, block.timestamp);
+        }
     }
 
     // ─────────────────────────────────────────── Read-Only / FR-04 Tallying ──
     /**
      * @notice FR-04  Returns the full candidate list with live tallies.
-     *         Pure read: zero gas for the caller when invoked off-chain.
      */
     function getAllCandidates() external view returns (Candidate[] memory) {
         return candidates;
@@ -222,7 +307,6 @@ contract AdvancedVoting {
 
     /**
      * @notice Returns the current winning candidateId (ties resolved by lowest id).
-     *         Reverts if no candidates exist or no votes cast.
      */
     function getWinner() external view electionEnded returns (uint256 winnerId, string memory winnerName, uint256 winningVotes) {
         require(candidates.length > 0, "AV: no candidates");
@@ -249,10 +333,6 @@ contract AdvancedVoting {
     }
 
     // ─────────────────────────────────────────────── Admin: Finalize ──────
-    /**
-     * @notice Admin permanently freezes the election result for audit.
-     *         Emits final tallies for off-chain indexers.
-     */
     function finalizeElection() external onlyAdmin {
         require(block.timestamp >= electionDeadline, "AV: deadline not reached");
         require(!electionFinalized, "AV: already finalized");
@@ -266,10 +346,6 @@ contract AdvancedVoting {
     }
 
     // ─────────────────────────────────────────── Admin: Candidate & Lifecycle ──
-    /**
-     * @notice Admin removes a candidate from active display.
-     * @param _candidateId Zero-indexed position in candidates list.
-     */
     function removeCandidate(uint256 _candidateId) external onlyAdmin {
         require(_candidateId < candidates.length, "AV: invalid candidateId");
         require(candidates[_candidateId].isActive, "AV: already inactive");
@@ -277,20 +353,12 @@ contract AdvancedVoting {
         emit CandidateRemoved(_candidateId);
     }
 
-    /**
-     * @notice Admin changes the election deadline dynamically.
-     * @param _newDeadline Epoch timestamp of new end date.
-     */
     function updateElectionDeadline(uint256 _newDeadline) external onlyAdmin {
         require(_newDeadline > block.timestamp, "AV: deadline must be in future");
         electionDeadline = _newDeadline;
         emit ElectionDeadlineUpdated(_newDeadline);
     }
 
-    /**
-     * @notice Admin resets election parameters to launch a new, fresh election.
-     * @param _durationInMinutes Duration of the new election.
-     */
     function resetElection(uint256 _durationInMinutes) external onlyAdmin {
         require(_durationInMinutes > 0, "AV: duration must be > 0");
         electionId++;

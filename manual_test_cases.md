@@ -78,19 +78,28 @@ This document contains step-by-step test cases for manually testing the Advanced
   2. Click "Vote" (or "Override Vote") and confirm the transaction.
 - **Expected Result:** Transaction succeeds. Candidate 0's vote count DECREASES by 1. Candidate 1's vote count INCREASES by 1.
 
-### TC-3.3: Attempt to Vote with Unregistered Wallet
+### TC-3.3: Gasless Meta-Transaction Voting (EIP-712)
+- **Precondition:** Logged in as Voter A (whitelisted). Voter A's wallet contains 0 ETH (completely empty). The Relayer server is running.
+- **Steps:**
+  1. Select Candidate 0.
+  2. Click "Vote Now".
+  3. MetaMask will prompt a free cryptographic signature request (EIP-712 Typed Structured Data) rather than a gas transaction.
+  4. Sign the message (0 ETH cost).
+  5. The Relayer intercepts the signature, submits it to the contract, and pays the transaction fee.
+- **Expected Result:** Vote is cast successfully! Candidate 0's vote count increases by 1. A success toast notifications says "Vote cast gaslessly! University Relayer covered the fee."
+
+### TC-3.4: Attempt to Vote with Unregistered Wallet
 - **Precondition:** Logged in as an Unregistered Voter (not whitelisted).
 - **Steps:**
   1. Select Candidate 1.
-  2. Click "Vote" and confirm the transaction.
-- **Expected Result:** Transaction reverts with error: `"AV: wallet not authorized"`.
+  2. Click "Vote Now" and sign the signature/confirm transaction.
+- **Expected Result:** Relayer rejects the vote with "Voter wallet is not whitelisted" or contract reverts with `"AV: wallet not authorized"`.
 
-### TC-3.4: Attempt to Vote for Inactive Candidate
+### TC-3.5: Attempt to Vote for Inactive Candidate
 - **Precondition:** Logged in as Voter B (whitelisted). Candidate 0 has been removed/deactivated by admin.
 - **Steps:**
-  1. Attempt to call `vote(0)` (via UI or direct contract call).
-  2. Confirm the transaction.
-- **Expected Result:** Transaction reverts with error: `"AV: candidate is inactive"`.
+  1. Attempt to vote for Candidate 0.
+- **Expected Result:** Relayer or contract rejects the vote with error `"AV: candidate is inactive"`.
 
 ---
 

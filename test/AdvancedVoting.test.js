@@ -167,4 +167,139 @@ describe("AdvancedVoting", function () {
     const candidatesCount = await contract.getCandidateCount();
     expect(candidatesCount).to.equal(0n);
   });
+
+  // ── EIP-712 Gasless Meta-Transactions ─────────────────────────────────────
+  describe("EIP-712 Gasless Voting", function () {
+    it("should allow a voter to vote gaslessly via a signed EIP-712 message", async () => {
+      // 1. Whitelist the voter address
+      await contract.whitelistAnonymousWallet(voter1.address);
+
+      // 2. Setup domain and type definitions matching contract
+      const network = await hre.ethers.provider.getNetwork();
+      const domain = {
+        name: "CryptoVote Campus",
+        version: "2",
+        chainId: Number(network.chainId),
+        verifyingContract: await contract.getAddress(),
+      };
+
+      const types = {
+        Vote: [
+          { name: "voter", type: "address" },
+          { name: "candidateId", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+        ],
+      };
+
+      const value = {
+        voter: voter1.address,
+        candidateId: 0n,
+        nonce: 0n,
+      };
+
+      // 3. Sign the vote from voter1's private key (simulating MetaMask)
+      const signature = await voter1.signTypedData(domain, types, value);
+      const sig = hre.ethers.Signature.from(signature);
+
+      // 4. Submit transaction from stranger (relayer pays gas!)
+      await expect(
+        contract.connect(stranger).castGaslessVote(
+          voter1.address,
+          0n,
+          0n,
+          sig.v,
+          sig.r,
+          sig.s
+        )
+      ).to.emit(contract, "GaslessVoteCast")
+       .withArgs(voter1.address, 0n, stranger.address, false, anyValue => true);
+
+      // 5. Verify the candidate's vote count increased
+      const candidates = await contract.getAllCandidates();
+      expect(candidates[0].voteCount).to.equal(1n);
+
+      // 6. Verify voter's nonce has been incremented
+      expect(await contract.metaTxNonces(voter1.address)).to.equal(1n);
+    });
+
+    it("should reject gasless vote if signature doesn't match voter", async () => {
+      await contract.whitelistAnonymousWallet(voter1.address);
+      const network = await hre.ethers.provider.getNetwork();
+      const domain = {
+        name: "CryptoVote Campus",
+        version: "2",
+        chainId: Number(network.chainId),
+        verifyingContract: await contract.getAddress(),
+      };
+
+      const types = {
+        Vote: [
+          { name: "voter", type: "address" },
+          { name: "candidateId", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+        ],
+      };
+
+      // voter1 is the claimed voter, but stranger signs it!
+      const value = {
+        voter: voter1.address,
+        candidateId: 0n,
+        nonce: 0n,
+      };
+
+      const signature = await stranger.signTypedData(domain, types, value);
+      const sig = hre.ethers.Signature.from(signature);
+
+      await expect(
+        contract.connect(stranger).castGaslessVote(
+          voter1.address,
+          0n,
+          0n,
+          sig.v,
+          sig.r,
+          sig.s
+        )
+      ).to.be.revertedWith("AV: signer mismatch");
+    });
+
+    it("should reject gasless vote with incorrect nonce to prevent replay", async () => {
+      await contract.whitelistAnonymousWallet(voter1.address);
+      const network = await hre.ethers.provider.getNetwork();
+      const domain = {
+        name: "CryptoVote Campus",
+        version: "2",
+        chainId: Number(network.chainId),
+        verifyingContract: await contract.getAddress(),
+      };
+
+      const types = {
+        Vote: [
+          { name: "voter", type: "address" },
+          { name: "candidateId", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+        ],
+      };
+
+      // Expecting nonce = 0, but voter signs with 999
+      const value = {
+        voter: voter1.address,
+        candidateId: 0n,
+        nonce: 999n,
+      };
+
+      const signature = await voter1.signTypedData(domain, types, value);
+      const sig = hre.ethers.Signature.from(signature);
+
+      await expect(
+        contract.connect(stranger).castGaslessVote(
+          voter1.address,
+          0n,
+          999n,
+          sig.v,
+          sig.r,
+          sig.s
+        )
+      ).to.be.revertedWith("AV: invalid nonce");
+    });
+  });
 });

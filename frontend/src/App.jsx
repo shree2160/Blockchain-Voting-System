@@ -82,7 +82,16 @@ function AppInner() {
     const result = await voting.castVote(pendingVote.id);
     setPendingVote(null);
     if (result.success) {
-      addToast(wasOverride ? t("txOverride") : t("txSuccess"), "success");
+      if (result.gasless) {
+        addToast(
+          wasOverride
+            ? "Vote overridden gaslessly! University Relayer covered the fee."
+            : "Vote cast gaslessly! University Relayer covered the fee.",
+          "success"
+        );
+      } else {
+        addToast(wasOverride ? t("txOverride") : t("txSuccess"), "success");
+      }
     } else {
       addToast(result.error || t("txError"), "error");
     }

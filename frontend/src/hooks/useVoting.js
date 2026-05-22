@@ -23,6 +23,22 @@ const SUPPORTED_CHAINS = {
   11155111: "Sepolia Testnet",
 };
 
+// Gasless Relayer endpoint
+const RELAYER_URL = "http://localhost:4000";
+
+// EIP-712 typed data definition for gasless voting
+const EIP712_DOMAIN = {
+  name: "CryptoVote Campus",
+  version: "2",
+};
+const VOTE_TYPES = {
+  Vote: [
+    { name: "voter", type: "address" },
+    { name: "candidateId", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+  ],
+};
+
 // ─── Hook ──────────────────────────────────────────────────────────────────
 export function useVoting() {
   // Wallet / provider state
@@ -208,19 +224,30 @@ export function useVoting() {
     }
   }, [fetchContractData]);
 
-  // ── Cast / override vote ────────────────────────────────────────────────
+  // ── Cast / override vote (auto-routes: gasless if low ETH, direct otherwise) ──
   const castVote = useCallback(async (candidateId) => {
-    if (!contractRef.current || !signerRef.current) {
+    if (!account) {
       setError("Please connect your wallet first.");
       return { success: false };
     }
     clearError();
     setTxPending(true);
     try {
-      const tx = await contractRef.current.vote(candidateId);
-      await tx.wait();                        // wait for 1 confirmation
-      await fetchContractData(account);       // refresh tallies
-      return { success: true, wasOverride: voterRecord.hasVoted };
+      // Check if wallet has enough ETH for gas
+      const provider = providerRef.current || new ethers.BrowserProvider(window.ethereum);
+      const balance = await provider.getBalance(account);
+      const hasGas = balance > ethers.parseEther("0.0005"); // ~0.0005 ETH threshold
+
+      if (hasGas && contractRef.current && signerRef.current) {
+        // ── Direct vote path (voter pays gas) ──────────────────────────
+        const tx = await contractRef.current.vote(candidateId);
+        await tx.wait();
+        await fetchContractData(account);
+        return { success: true, wasOverride: voterRecord.hasVoted, gasless: false };
+      } else {
+        // ── Gasless meta-transaction path (relayer pays gas) ───────────
+        return await castGaslessVote(candidateId);
+      }
     } catch (err) {
       console.error("castVote error:", err);
       const msg =
@@ -232,6 +259,67 @@ export function useVoting() {
       return { success: false, error: msg };
     } finally {
       setTxPending(false);
+    }
+  }, [account, voterRecord.hasVoted, fetchContractData]);
+
+  // ── Gasless EIP-712 Meta-Transaction Vote ──────────────────────────────
+  const castGaslessVote = useCallback(async (candidateId) => {
+    if (!account) return { success: false, error: "Wallet not connected" };
+    clearError();
+
+    try {
+      // 1. Fetch current nonce from relayer
+      const nonceRes = await fetch(`${RELAYER_URL}/nonce/${account}`);
+      if (!nonceRes.ok) throw new Error("Failed to fetch nonce from relayer");
+      const { nonce } = await nonceRes.json();
+
+      // 2. Build EIP-712 typed data
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const network = await provider.getNetwork();
+
+      const domain = {
+        ...EIP712_DOMAIN,
+        chainId: Number(network.chainId),
+        verifyingContract: CONTRACT_ADDRESS,
+      };
+
+      const value = {
+        voter: account,
+        candidateId: BigInt(candidateId),
+        nonce: BigInt(nonce),
+      };
+
+      // 3. Sign typed data (free — no gas cost)
+      const signature = await signer.signTypedData(domain, VOTE_TYPES, value);
+
+      // 4. Send to relayer
+      const relayRes = await fetch(`${RELAYER_URL}/relay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voter: account,
+          candidateId: Number(candidateId),
+          nonce: Number(nonce),
+          signature,
+        }),
+      });
+
+      const result = await relayRes.json();
+
+      if (!relayRes.ok || !result.success) {
+        throw new Error(result.error || "Relayer rejected the vote");
+      }
+
+      // 5. Refresh data after successful relay
+      await fetchContractData(account);
+      return { success: true, wasOverride: voterRecord.hasVoted, gasless: true, txHash: result.txHash };
+
+    } catch (err) {
+      console.error("castGaslessVote error:", err);
+      const msg = err.message || "Gasless vote failed.";
+      setError(msg);
+      return { success: false, error: msg };
     }
   }, [account, voterRecord.hasVoted, fetchContractData]);
 
@@ -474,7 +562,11 @@ export function useVoting() {
     };
 
     contract.on("VoteCast", handleVoteCast);
-    return () => { contract.off("VoteCast", handleVoteCast); };
+    contract.on("GaslessVoteCast", handleVoteCast);
+    return () => {
+      contract.off("VoteCast", handleVoteCast);
+      contract.off("GaslessVoteCast", handleVoteCast);
+    };
   }, [account, fetchContractData]);
 
   // ── Countdown timer ─────────────────────────────────────────────────────
@@ -512,6 +604,7 @@ export function useVoting() {
 
     // Actions
     castVote,
+    castGaslessVote,
     whitelistWallet,
     batchWhitelistWallets,
     registerVoter,
