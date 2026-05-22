@@ -47,6 +47,15 @@ describe("AdvancedVoting", function () {
     expect(await contract.validAnonymousWallets(voter1.address)).to.be.true;
   });
 
+  it("allows stranger (relayer) to register voter on behalf of them using registerVoterFor", async () => {
+    const messageHash = hre.ethers.solidityPackedKeccak256(["address"], [voter1.address]);
+    const signature = await admin.signMessage(hre.ethers.getBytes(messageHash));
+    
+    // Stranger (relayer) submits registration and pays gas!
+    await contract.connect(stranger).registerVoterFor(voter1.address, signature);
+    expect(await contract.validAnonymousWallets(voter1.address)).to.be.true;
+  });
+
   it("rejects voter self-registration with an invalid signature", async () => {
     const messageHash = hre.ethers.solidityPackedKeccak256(["address"], [voter1.address]);
     const signature = await stranger.signMessage(hre.ethers.getBytes(messageHash));

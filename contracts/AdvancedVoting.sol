@@ -159,6 +159,29 @@ contract AdvancedVoting {
         emit WalletWhitelisted(msg.sender, block.timestamp);
     }
 
+    /**
+     * @notice Relayed Cryptographic Voter Self-Registration (ECDSA)
+     * @dev Allows the Gasless Relayer to pay the gas fee to register a student wallet.
+     * @param _voter The voter address being registered.
+     * @param _signature Signature generated off-chain by the college registrar for this specific voter.
+     */
+    function registerVoterFor(address _voter, bytes calldata _signature) external electionActive {
+        require(!validAnonymousWallets[_voter], "AV: already whitelisted");
+        
+        // Hash the voter's address
+        bytes32 messageHash = keccak256(abi.encodePacked(_voter));
+        bytes32 ethSignedMessageHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", messageHash));
+        
+        // Recover signer using ecrecover
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+        address signer = ecrecover(ethSignedMessageHash, v, r, s);
+        
+        require(signer == campusAuthority, "AV: invalid campus authorization");
+        
+        validAnonymousWallets[_voter] = true;
+        emit WalletWhitelisted(_voter, block.timestamp);
+    }
+
     function splitSignature(bytes memory sig) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
         require(sig.length == 65, "AV: invalid signature length");
         assembly {

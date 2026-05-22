@@ -508,6 +508,24 @@
     {
       "inputs": [
         {
+          "internalType": "address",
+          "name": "_voter",
+          "type": "address"
+        },
+        {
+          "internalType": "bytes",
+          "name": "_signature",
+          "type": "bytes"
+        }
+      ],
+      "name": "registerVoterFor",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
           "internalType": "uint256",
           "name": "_candidateId",
           "type": "uint256"
@@ -654,5 +672,5 @@
       "type": "receive"
     }
   ],
-  "address": "0xc454Ce5Eb531e06a5436098cc59317f807a8bEF4"
+  "address": "0x823C8F6B32C311D8541Eb1657c11606E81b71c52"
 }

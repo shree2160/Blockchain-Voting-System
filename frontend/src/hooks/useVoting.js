@@ -313,34 +313,36 @@ export function useVoting() {
     setTxPending(true);
     try {
       // 1. Prioritize Gasless Meta-Transaction EIP-712 Voting for ALL wallets
-      const res = await castGaslessVote(candidateId);
-      if (res.success) {
-        return res;
+      try {
+        const res = await castGaslessVote(candidateId);
+        if (res.success) {
+          return res;
+        }
+        // If relayer returned an explicit error (e.g. not whitelisted), throw it to prevent silent failure
+        if (res.error) {
+          throw new Error(res.error);
+        }
+      } catch (err) {
+        console.warn("Gasless vote failed, checking fallback to direct path:", err.message);
+        const msg = parseMetaMaskError(err);
+        setError(msg);
+        return { success: false, error: msg };
       }
-      // If relayer returned an explicit error (e.g. not whitelisted), throw it to prevent silent failure
-      if (res.error) {
-        throw new Error(res.error);
-      }
-    } catch (err) {
-      console.warn("Gasless vote failed, checking fallback to direct path:", err.message);
-      const msg = parseMetaMaskError(err);
-      setError(msg);
-      return { success: false, error: msg };
-    }
 
-    // 2. Fallback to Direct Vote if gasless fails or is not applicable
-    try {
-      if (contractRef.current && signerRef.current) {
-        const tx = await contractRef.current.vote(candidateId);
-        await tx.wait();
-        await fetchContractData(account);
-        return { success: true, wasOverride: voterRecord.hasVoted, gasless: false };
+      // 2. Fallback to Direct Vote if gasless fails or is not applicable
+      try {
+        if (contractRef.current && signerRef.current) {
+          const tx = await contractRef.current.vote(candidateId);
+          await tx.wait();
+          await fetchContractData(account);
+          return { success: true, wasOverride: voterRecord.hasVoted, gasless: false };
+        }
+      } catch (directErr) {
+        console.error("Direct fallback vote error:", directErr);
+        const msg = parseMetaMaskError(directErr);
+        setError(msg);
+        return { success: false, error: msg };
       }
-    } catch (directErr) {
-      console.error("Direct fallback vote error:", directErr);
-      const msg = parseMetaMaskError(directErr);
-      setError(msg);
-      return { success: false, error: msg };
     } finally {
       setTxPending(false);
     }
@@ -382,18 +384,50 @@ export function useVoting() {
     }
   }, []);
 
-  // ── Voter: Self-Register Cryptographically ──────────────────────────────
+  // ── Voter: Self-Register Cryptographically (Gasless Relayer by default; Direct fallback) ──
   const registerVoter = useCallback(async (signature) => {
-    if (!contractRef.current) return { success: false };
+    if (!account) return { success: false, error: "Please connect your wallet." };
     clearError();
     setTxPending(true);
+
+    // 1. Try EIP-712 Gasless Registration via Relayer first
     try {
-      const tx = await contractRef.current.registerVoter(signature);
-      await tx.wait();
-      await fetchContractData(account); // Refresh whitelisting state
-      return { success: true };
+      console.log("📝 Attempting gasless student registration via relayer...");
+      const relayRes = await fetch(`${RELAYER_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voter: account,
+          signature,
+        }),
+      });
+
+      const result = await relayRes.json();
+      if (relayRes.ok && result.success) {
+        console.log("✅ Gasless registration successful:", result.txHash);
+        await fetchContractData(account);
+        return { success: true, gasless: true, txHash: result.txHash };
+      }
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
     } catch (err) {
-      const msg = err?.reason || err.message || "Registration failed.";
+      console.warn("Gasless registration failed, falling back to direct transaction:", err.message);
+    }
+
+    // 2. Direct blockchain registration fallback (requires user gas)
+    try {
+      if (contractRef.current) {
+        console.log("⛽ Falling back to direct blockchain registration...");
+        const tx = await contractRef.current.registerVoter(signature);
+        await tx.wait();
+        await fetchContractData(account);
+        return { success: true, gasless: false };
+      }
+    } catch (err) {
+      console.error("Direct registration error:", err);
+      const msg = parseMetaMaskError(err);
       setError(msg);
       return { success: false, error: msg };
     } finally {

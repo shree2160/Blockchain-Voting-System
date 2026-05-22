@@ -159,6 +159,40 @@ app.post("/relay", async (req, res) => {
   }
 });
 
+// Submit a gasless student registration
+app.post("/register", async (req, res) => {
+  try {
+    const { voter, signature } = req.body;
+
+    if (!voter || !signature) {
+      return res.status(400).json({ error: "Missing required fields: voter, signature" });
+    }
+
+    if (!ethers.isAddress(voter)) {
+      return res.status(400).json({ error: "Invalid voter address" });
+    }
+
+    // Submit to blockchain
+    console.log(`📝 Relaying gasless registration: voter=${voter}`);
+    const tx = await contract.registerVoterFor(voter, signature);
+
+    console.log(`⏳ TX submitted: ${tx.hash}`);
+    const receipt = await tx.wait();
+    console.log(`✅ Registration confirmed in block ${receipt.blockNumber}`);
+
+    res.json({
+      success: true,
+      txHash: tx.hash,
+      blockNumber: Number(receipt.blockNumber),
+    });
+
+  } catch (err) {
+    console.error("Registration relay error:", err);
+    const reason = err?.reason || err?.data?.message || err?.message || "Registration transaction failed";
+    res.status(500).json({ error: reason });
+  }
+});
+
 // ── Start Server ────────────────────────────────────────────────────────────
 async function start() {
   await initDomain();
