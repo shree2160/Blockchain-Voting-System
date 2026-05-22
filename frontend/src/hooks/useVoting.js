@@ -39,6 +39,24 @@ const VOTE_TYPES = {
   ],
 };
 
+// Formats giant MetaMask / Ethers action rejection logs into user-friendly messages
+function parseMetaMaskError(err) {
+  if (!err) return "Transaction failed.";
+  const reason = err.reason || err.data?.message || err.message || "";
+  
+  if (
+    err.code === "ACTION_REJECTED" || 
+    err.code === 4001 || 
+    reason.toLowerCase().includes("rejected") || 
+    reason.toLowerCase().includes("user rejected") ||
+    reason.toLowerCase().includes("denied")
+  ) {
+    return "Vote signature request was cancelled in MetaMask.";
+  }
+  
+  return reason || "Transaction failed.";
+}
+
 // ─── Hook ──────────────────────────────────────────────────────────────────
 export function useVoting() {
   // Wallet / provider state
@@ -279,7 +297,7 @@ export function useVoting() {
 
     } catch (err) {
       console.error("castGaslessVote error:", err);
-      const msg = err.message || "Gasless vote failed.";
+      const msg = parseMetaMaskError(err);
       setError(msg);
       return { success: false, error: msg };
     }
@@ -305,8 +323,9 @@ export function useVoting() {
       }
     } catch (err) {
       console.warn("Gasless vote failed, checking fallback to direct path:", err.message);
-      setError(err.message);
-      return { success: false, error: err.message };
+      const msg = parseMetaMaskError(err);
+      setError(msg);
+      return { success: false, error: msg };
     }
 
     // 2. Fallback to Direct Vote if gasless fails or is not applicable
@@ -319,7 +338,7 @@ export function useVoting() {
       }
     } catch (directErr) {
       console.error("Direct fallback vote error:", directErr);
-      const msg = directErr?.reason || directErr?.data?.message || directErr.message || "Transaction failed.";
+      const msg = parseMetaMaskError(directErr);
       setError(msg);
       return { success: false, error: msg };
     } finally {
