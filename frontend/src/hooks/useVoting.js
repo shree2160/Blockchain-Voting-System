@@ -23,8 +23,22 @@ const SUPPORTED_CHAINS = {
   11155111: "Sepolia Testnet",
 };
 
-// Gasless Relayer endpoint
-const RELAYER_URL = "http://localhost:4000";
+// Gasless Relayer endpoint:
+// 1. Supports VITE_RELAYER_URL environment variable for deployed environments.
+// 2. Automatically resolves to the host's LAN IP when testing on local Wi-Fi.
+// 3. Defaults to localhost for single-device local development.
+const getRelayerUrl = () => {
+  if (import.meta.env.VITE_RELAYER_URL) {
+    return import.meta.env.VITE_RELAYER_URL;
+  }
+  const hostname = window.location.hostname;
+  const isLAN = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(hostname);
+  if (isLAN) {
+    return `http://${hostname}:4000`;
+  }
+  return "http://localhost:4000";
+};
+const RELAYER_URL = getRelayerUrl();
 
 // EIP-712 typed data definition for gasless voting
 const EIP712_DOMAIN = {

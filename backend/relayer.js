@@ -15,9 +15,9 @@ const { ethers } = require("ethers");
 require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
 
 // ── Config ──────────────────────────────────────────────────────────────────
-const PORT = process.env.RELAYER_PORT || 4000;
-const RPC_URL = process.env.SEPOLIA_RPC_URL || "http://127.0.0.1:8545";
-const RELAYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
+const PORT = process.env.PORT || process.env.RELAYER_PORT || 4000;
+const RPC_URL = process.env.RPC_URL || process.env.SEPOLIA_RPC_URL || "http://127.0.0.1:8545";
+const RELAYER_PRIVATE_KEY = process.env.PRIVATE_KEY || process.env.DEPLOYER_PRIVATE_KEY;
 
 // Load ABI + address from frontend build artifact
 const artifact = require("../frontend/src/abis/AdvancedVoting.json");
@@ -25,7 +25,7 @@ const CONTRACT_ABI = artifact.abi;
 const CONTRACT_ADDRESS = artifact.address;
 
 if (!RELAYER_PRIVATE_KEY) {
-  console.error("❌ DEPLOYER_PRIVATE_KEY not set in .env");
+  console.error("❌ PRIVATE_KEY or DEPLOYER_PRIVATE_KEY not set");
   process.exit(1);
 }
 if (!CONTRACT_ADDRESS) {
